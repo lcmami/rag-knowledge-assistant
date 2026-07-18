@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Factory RAG 知識助理</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <h1>Factory RAG 知識助理</h1>
+      <div id="ready-status" class="ready-status" title="服務就緒狀態">
+        <span class="dot dot-unknown"></span>
+        <span class="ready-text">檢查服務狀態…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- LLM 未設定時顯示的全域提示（由 JS 依 /ready 控制顯示） -->
+  <div id="llm-banner" class="banner banner-warn" hidden>
+    <strong>LLM 服務尚未設定，</strong>目前仍可使用文件上傳與向量檢索功能。
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="documents" role="tab">文件管理</button>
+    <button class="tab" data-tab="retrieve" role="tab">向量檢索</button>
+    <button class="tab" data-tab="query" role="tab">RAG 問答</button>
+  </nav>
+
+  <main>
+    <!-- 區塊一：文件管理 -->
+    <section id="panel-documents" class="panel active">
+      <h2>文件管理</h2>
+      <form id="upload-form" class="card">
+        <label for="file-input">上傳文件（支援 .md / .markdown / .txt / .pdf，上限 10 MB）</label>
+        <div class="row">
+          <input type="file" id="file-input" accept=".md,.markdown,.txt,.pdf" required />
+          <button type="submit" id="upload-btn">上傳並索引</button>
+        </div>
+        <div id="upload-msg" class="msg" aria-live="polite"></div>
+      </form>
+
+      <div class="card">
+        <div class="row row-between">
+          <h3>已上傳文件</h3>
+          <button id="refresh-docs" class="secondary">重新整理</button>
+        </div>
+        <div id="docs-msg" class="msg" aria-live="polite"></div>
+        <div class="table-wrap">
+          <table id="docs-table">
+            <thead>
+              <tr>
+                <th>檔名</th><th>類型</th><th>大小</th><th>狀態</th>
+                <th>Chunks</th><th>建立時間</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="docs-tbody">
+              <tr><td colspan="7" class="empty">尚未載入。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 區塊二：向量檢索（不依賴 LLM） -->
+    <section id="panel-retrieve" class="panel">
+      <h2>向量檢索</h2>
+      <p class="hint">直接執行語意檢索，不呼叫 LLM。即使 LLM 未設定也能使用。</p>
+      <form id="retrieve-form" class="card">
+        <label for="retrieve-q">問題 / 查詢語句</label>
+        <textarea id="retrieve-q" rows="2" placeholder="例如：設備出現 E102 警報時，應該如何處理？" required></textarea>
+        <div class="row">
+          <label class="inline">top_k
+            <input type="number" id="retrieve-topk" min="1" max="10" placeholder="預設 5" />
+          </label>
+          <button type="submit" id="retrieve-btn">檢索</button>
+        </div>
+        <div id="retrieve-msg" class="msg" aria-live="polite"></div>
+      </form>
+      <div id="retrieve-results" class="results"></div>
+    </section>
+
+    <!-- 區塊三：RAG 問答（依賴 LLM） -->
+    <section id="panel-query" class="panel">
+      <h2>RAG 問答</h2>
+      <p class="hint">檢索 → 雙層拒答 → LLM 生成 → Citation 驗證。需要已設定的 LLM 服務。</p>
+      <form id="query-form" class="card">
+        <label for="query-q">問題</label>
+        <textarea id="query-q" rows="2" placeholder="例如：設備出現 E102 警報時，應該如何處理？" required></textarea>
+        <div class="row">
+          <label class="inline">top_k
+            <input type="number" id="query-topk" min="1" max="10" placeholder="預設 5" />
+          </label>
+          <button type="submit" id="query-btn">送出問題</button>
+        </div>
+        <div id="query-msg" class="msg" aria-live="polite"></div>
+      </form>
+      <div id="query-answer" class="answer" hidden></div>
+      <div id="query-sources" class="results"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Factory RAG 知識助理 · 前端僅呼叫後端 API，不含任何金鑰或生成邏輯。</span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

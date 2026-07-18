@@ -1,0 +1,34 @@
+[project]
+name = "factory-rag-assistant"
+version = "1.0.0"
+description = "智慧製造文件 RAG 知識助理"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "pydantic-settings",
+    "python-multipart",
+    "pymupdf",
+    "sentence-transformers",
+    "transformers",
+    "qdrant-client",
+    "openai",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "integration: 需要真實 Qdrant 與 sentence-transformers 模型的整合測試",
+    "llm_integration: 需要真實 OpenAI-compatible LLM endpoint 的 smoke test（未設定環境變數時 skip）",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

@@ -1,0 +1,651 @@
+{
+  "embedding_model": "BAAI/bge-small-zh-v1.5",
+  "vector_size": 512,
+  "distance": "Cosine",
+  "chunk_size_chars": 600,
+  "chunk_overlap_chars": 100,
+  "embedding_max_tokens": 480,
+  "collection": "factory_evaluation",
+  "top_k": 10,
+  "threshold": 0.0,
+  "total_questions": 20,
+  "answerable_count": 12,
+  "unanswerable_count": 8,
+  "hit_at_1": 1.0,
+  "hit_at_3": 1.0,
+  "section_hit_at_1": 0.9091,
+  "page_hit_at_1": 1.0,
+  "section_hit_considered": 11,
+  "page_hit_considered": 4,
+  "average_latency_ms": 25.4,
+  "p50_latency_ms": 22.0,
+  "p95_latency_ms": 43.05,
+  "answerable_score_summary": {
+    "count": 12,
+    "min": 0.5816,
+    "p25": 0.6733,
+    "median": 0.7044,
+    "mean": 0.7043,
+    "p75": 0.7368,
+    "max": 0.828
+  },
+  "unanswerable_score_summary": {
+    "count": 8,
+    "min": 0.2898,
+    "p25": 0.4009,
+    "median": 0.4609,
+    "mean": 0.46,
+    "p75": 0.5264,
+    "max": 0.6319
+  },
+  "threshold_at_configured": {
+    "threshold": 0.0,
+    "answerable_accept_rate": 1.0,
+    "answerable_false_reject_rate": 0.0,
+    "unanswerable_refuse_rate": 0.0,
+    "unanswerable_false_accept_rate": 1.0,
+    "precision": 0.6,
+    "false_accepted_unanswerable_ids": [
+      "Q013",
+      "Q014",
+      "Q015",
+      "Q016",
+      "Q017",
+      "Q018",
+      "Q019",
+      "Q020"
+    ],
+    "false_rejected_answerable_ids": []
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.3,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.125,
+      "unanswerable_false_accept_rate": 0.875,
+      "precision": 0.6316,
+      "false_accepted_unanswerable_ids": [
+        "Q013",
+        "Q014",
+        "Q015",
+        "Q016",
+        "Q017",
+        "Q018",
+        "Q019"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.35,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.125,
+      "unanswerable_false_accept_rate": 0.875,
+      "precision": 0.6316,
+      "false_accepted_unanswerable_ids": [
+        "Q013",
+        "Q014",
+        "Q015",
+        "Q016",
+        "Q017",
+        "Q018",
+        "Q019"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.4,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.25,
+      "unanswerable_false_accept_rate": 0.75,
+      "precision": 0.6667,
+      "false_accepted_unanswerable_ids": [
+        "Q013",
+        "Q014",
+        "Q015",
+        "Q016",
+        "Q017",
+        "Q019"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.45,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.375,
+      "unanswerable_false_accept_rate": 0.625,
+      "precision": 0.7059,
+      "false_accepted_unanswerable_ids": [
+        "Q013",
+        "Q014",
+        "Q016",
+        "Q017",
+        "Q019"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.5,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.625,
+      "unanswerable_false_accept_rate": 0.375,
+      "precision": 0.8,
+      "false_accepted_unanswerable_ids": [
+        "Q016",
+        "Q017",
+        "Q019"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.55,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.875,
+      "unanswerable_false_accept_rate": 0.125,
+      "precision": 0.9231,
+      "false_accepted_unanswerable_ids": [
+        "Q016"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.6,
+      "answerable_accept_rate": 0.9167,
+      "answerable_false_reject_rate": 0.0833,
+      "unanswerable_refuse_rate": 0.875,
+      "unanswerable_false_accept_rate": 0.125,
+      "precision": 0.9167,
+      "false_accepted_unanswerable_ids": [
+        "Q016"
+      ],
+      "false_rejected_answerable_ids": [
+        "Q012"
+      ]
+    },
+    {
+      "threshold": 0.65,
+      "answerable_accept_rate": 0.75,
+      "answerable_false_reject_rate": 0.25,
+      "unanswerable_refuse_rate": 1.0,
+      "unanswerable_false_accept_rate": 0.0,
+      "precision": 1.0,
+      "false_accepted_unanswerable_ids": [],
+      "false_rejected_answerable_ids": [
+        "Q001",
+        "Q005",
+        "Q012"
+      ]
+    },
+    {
+      "threshold": 0.7,
+      "answerable_accept_rate": 0.5,
+      "answerable_false_reject_rate": 0.5,
+      "unanswerable_refuse_rate": 1.0,
+      "unanswerable_false_accept_rate": 0.0,
+      "precision": 1.0,
+      "false_accepted_unanswerable_ids": [],
+      "false_rejected_answerable_ids": [
+        "Q001",
+        "Q005",
+        "Q007",
+        "Q010",
+        "Q011",
+        "Q012"
+      ]
+    }
+  ],
+  "ingested_chunk_counts": {
+    "api_integration_spec.md": 5,
+    "equipment_alarm_manual.md": 5,
+    "equipment_maintenance_manual.pdf": 5,
+    "manufacturing_data_dictionary.txt": 1,
+    "mes_operation_sop.md": 4
+  },
+  "questions": [
+    {
+      "id": "Q001",
+      "question": "E102 警報代表什麼？",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E102 感測器通訊異常",
+      "expected_page": null,
+      "top1_score": 0.6299,
+      "top1_document": "equipment_alarm_manual.md",
+      "top1_section": "警報代碼對照表",
+      "top1_page": null,
+      "top3_documents": [
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": false,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 25
+    },
+    {
+      "id": "Q002",
+      "question": "設備顯示 E101 電源模組異常時，操作員應先確認什麼？",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E101 電源模組異常",
+      "expected_page": null,
+      "top1_score": 0.828,
+      "top1_document": "equipment_alarm_manual.md",
+      "top1_section": "E101 電源模組異常",
+      "top1_page": null,
+      "top3_documents": [
+        "equipment_alarm_manual.md",
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 22
+    },
+    {
+      "id": "Q003",
+      "question": "E203 溫度過高警報的安全閾值是攝氏幾度？",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E203 溫度過高警報",
+      "expected_page": null,
+      "top1_score": 0.803,
+      "top1_document": "equipment_alarm_manual.md",
+      "top1_section": "E203 溫度過高警報",
+      "top1_page": null,
+      "top3_documents": [
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 22
+    },
+    {
+      "id": "Q004",
+      "question": "CX-500 設備的基本保養每幾小時執行一次？",
+      "should_answer": true,
+      "expected_document": "equipment_maintenance_manual.pdf",
+      "expected_section": "定期保養週期",
+      "expected_page": 2,
+      "top1_score": 0.7283,
+      "top1_document": "equipment_maintenance_manual.pdf",
+      "top1_section": "定期保養週期",
+      "top1_page": 2,
+      "top3_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": true,
+      "retrieval_time_ms": 21
+    },
+    {
+      "id": "Q005",
+      "question": "空氣過濾網每幾小時需要清潔一次？",
+      "should_answer": true,
+      "expected_document": "equipment_maintenance_manual.pdf",
+      "expected_section": "定期保養週期",
+      "expected_page": 2,
+      "top1_score": 0.6096,
+      "top1_document": "equipment_maintenance_manual.pdf",
+      "top1_section": "定期保養週期",
+      "top1_page": 2,
+      "top3_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": true,
+      "retrieval_time_ms": 42
+    },
+    {
+      "id": "Q006",
+      "question": "通訊模組每幾小時進行一次預防性更換？",
+      "should_answer": true,
+      "expected_document": "equipment_maintenance_manual.pdf",
+      "expected_section": "通訊模組檢查",
+      "expected_page": 3,
+      "top1_score": 0.7441,
+      "top1_document": "equipment_maintenance_manual.pdf",
+      "top1_section": "通訊模組檢查",
+      "top1_page": 3,
+      "top3_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": true,
+      "retrieval_time_ms": 20
+    },
+    {
+      "id": "Q007",
+      "question": "CX-500 高速貼片機適用於哪一種產線？",
+      "should_answer": true,
+      "expected_document": "equipment_maintenance_manual.pdf",
+      "expected_section": "設備基本資訊",
+      "expected_page": 1,
+      "top1_score": 0.6987,
+      "top1_document": "equipment_maintenance_manual.pdf",
+      "top1_section": "設備基本資訊",
+      "top1_page": 1,
+      "top3_documents": [
+        "equipment_maintenance_manual.pdf",
+        "mes_operation_sop.md",
+        "equipment_alarm_manual.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": true,
+      "retrieval_time_ms": 23
+    },
+    {
+      "id": "Q008",
+      "question": "MES 工單如何從 WAITING 切換為 RUNNING？",
+      "should_answer": true,
+      "expected_document": "mes_operation_sop.md",
+      "expected_section": "工單狀態流程",
+      "expected_page": null,
+      "top1_score": 0.7101,
+      "top1_document": "mes_operation_sop.md",
+      "top1_section": "工單狀態流程",
+      "top1_page": null,
+      "top3_documents": [
+        "mes_operation_sop.md",
+        "mes_operation_sop.md",
+        "api_integration_spec.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 20
+    },
+    {
+      "id": "Q009",
+      "question": "MES 工單啟動前需要檢查哪些欄位？",
+      "should_answer": true,
+      "expected_document": "mes_operation_sop.md",
+      "expected_section": "工單啟動",
+      "expected_page": null,
+      "top1_score": 0.7343,
+      "top1_document": "mes_operation_sop.md",
+      "top1_section": "工單啟動",
+      "top1_page": null,
+      "top3_documents": [
+        "mes_operation_sop.md",
+        "mes_operation_sop.md",
+        "api_integration_spec.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 44
+    },
+    {
+      "id": "Q010",
+      "question": "API Token 的有效時間是多久？",
+      "should_answer": true,
+      "expected_document": "api_integration_spec.md",
+      "expected_section": "認證與 Token",
+      "expected_page": null,
+      "top1_score": 0.6965,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "認證與 Token",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "api_integration_spec.md",
+        "api_integration_spec.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 20
+    },
+    {
+      "id": "Q011",
+      "question": "API Token 字串的長度上限是多少字元？",
+      "should_answer": true,
+      "expected_document": "api_integration_spec.md",
+      "expected_section": "Token 規格",
+      "expected_page": null,
+      "top1_score": 0.6877,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "Token 規格",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "api_integration_spec.md",
+        "api_integration_spec.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 22
+    },
+    {
+      "id": "Q012",
+      "question": "PM-100 與 PM-1000 分別代表什麼模組？",
+      "should_answer": true,
+      "expected_document": "manufacturing_data_dictionary.txt",
+      "expected_section": null,
+      "expected_page": null,
+      "top1_score": 0.5816,
+      "top1_document": "manufacturing_data_dictionary.txt",
+      "top1_section": null,
+      "top1_page": null,
+      "top3_documents": [
+        "manufacturing_data_dictionary.txt",
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md"
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 35
+    },
+    {
+      "id": "Q013",
+      "question": "公司今年員工旅遊的目的地是哪裡？",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "top1_score": 0.4696,
+      "top1_document": "mes_operation_sop.md",
+      "top1_section": "工單啟動",
+      "top1_page": null,
+      "top3_documents": [
+        "mes_operation_sop.md",
+        "api_integration_spec.md",
+        "mes_operation_sop.md"
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 30
+    },
+    {
+      "id": "Q014",
+      "question": "產線作業員的月薪是多少？",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "top1_score": 0.4523,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "上報工單進度請求欄位",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "manufacturing_data_dictionary.txt",
+        "mes_operation_sop.md"
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 19
+    },
+    {
+      "id": "Q015",
+      "question": "這間公司是哪一年成立的？",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "top1_score": 0.4147,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "生產資料介接 API 規格",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "equipment_maintenance_manual.pdf",
+        "mes_operation_sop.md"
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 21
+    },
+    {
+      "id": "Q016",
+      "question": "CX-500 貼片機目前的市場售價是多少？",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "top1_score": 0.6319,
+      "top1_document": "equipment_maintenance_manual.pdf",
+      "top1_section": "設備基本資訊",
+      "top1_page": 1,
+      "top3_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 22
+    },
+    {
+      "id": "Q017",
+      "question": "今天員工餐廳的午餐菜單有哪些菜色？",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "top1_score": 0.522,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "上報工單進度請求欄位",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "mes_operation_sop.md",
+        "manufacturing_data_dictionary.txt"
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 19
+    },
+    {
+      "id": "Q018",
+      "question": "公司股票今天的收盤價是多少？",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "top1_score": 0.3595,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "上報工單進度請求欄位",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "manufacturing_data_dictionary.txt",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 43
+    },
+    {
+      "id": "Q019",
+      "question": "員工申請特休假需要提前幾天提出？",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "top1_score": 0.5398,
+      "top1_document": "mes_operation_sop.md",
+      "top1_section": "工單啟動",
+      "top1_page": null,
+      "top3_documents": [
+        "mes_operation_sop.md",
+        "equipment_maintenance_manual.pdf",
+        "mes_operation_sop.md"
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 19
+    },
+    {
+      "id": "Q020",
+      "question": "台灣的首都是哪一個城市？",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "top1_score": 0.2898,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "上報工單進度請求欄位",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "manufacturing_data_dictionary.txt",
+        "mes_operation_sop.md"
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "retrieval_time_ms": 19
+    }
+  ]
+}

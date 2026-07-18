@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# 環境設定與秘密
+.env
+.env.*
+!.env.example
+
+# 應用程式資料（上傳暫存檔與資料庫）
+storage/
+storage/uploads/
+*.db
+*.sqlite
+*.sqlite3
+
+# 向量資料庫本地儲存（若以本地目錄掛載時）
+qdrant_storage/
+
+# 測試產物
+test-results/
+playwright-report/
+
+# Hugging Face / 模型快取
+.cache/
+hf_cache/
+
+# 本機工具設定（Claude Code 代理權限，含機器絕對路徑）
+.claude/
+
+# 作業系統
+.DS_Store
+Thumbs.db

@@ -1,0 +1,162 @@
+[
+  {
+    "id": "Q001",
+    "question": "E102 警報代表什麼？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E102 感測器通訊異常",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "Q002",
+    "question": "設備顯示 E101 電源模組異常時，操作員應先確認什麼？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E101 電源模組異常",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "Q003",
+    "question": "E203 溫度過高警報的安全閾值是攝氏幾度？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E203 溫度過高警報",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "Q004",
+    "question": "CX-500 設備的基本保養每幾小時執行一次？",
+    "expected_document": "equipment_maintenance_manual.pdf",
+    "expected_section": "定期保養週期",
+    "expected_page": 2,
+    "should_answer": true
+  },
+  {
+    "id": "Q005",
+    "question": "空氣過濾網每幾小時需要清潔一次？",
+    "expected_document": "equipment_maintenance_manual.pdf",
+    "expected_section": "定期保養週期",
+    "expected_page": 2,
+    "should_answer": true
+  },
+  {
+    "id": "Q006",
+    "question": "通訊模組每幾小時進行一次預防性更換？",
+    "expected_document": "equipment_maintenance_manual.pdf",
+    "expected_section": "通訊模組檢查",
+    "expected_page": 3,
+    "should_answer": true
+  },
+  {
+    "id": "Q007",
+    "question": "CX-500 高速貼片機適用於哪一種產線？",
+    "expected_document": "equipment_maintenance_manual.pdf",
+    "expected_section": "設備基本資訊",
+    "expected_page": 1,
+    "should_answer": true
+  },
+  {
+    "id": "Q008",
+    "question": "MES 工單如何從 WAITING 切換為 RUNNING？",
+    "expected_document": "mes_operation_sop.md",
+    "expected_section": "工單狀態流程",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "Q009",
+    "question": "MES 工單啟動前需要檢查哪些欄位？",
+    "expected_document": "mes_operation_sop.md",
+    "expected_section": "工單啟動",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "Q010",
+    "question": "API Token 的有效時間是多久？",
+    "expected_document": "api_integration_spec.md",
+    "expected_section": "認證與 Token",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "Q011",
+    "question": "API Token 字串的長度上限是多少字元？",
+    "expected_document": "api_integration_spec.md",
+    "expected_section": "Token 規格",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "Q012",
+    "question": "PM-100 與 PM-1000 分別代表什麼模組？",
+    "expected_document": "manufacturing_data_dictionary.txt",
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "Q013",
+    "question": "公司今年員工旅遊的目的地是哪裡？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "Q014",
+    "question": "產線作業員的月薪是多少？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "Q015",
+    "question": "這間公司是哪一年成立的？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "Q016",
+    "question": "CX-500 貼片機目前的市場售價是多少？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "Q017",
+    "question": "今天員工餐廳的午餐菜單有哪些菜色？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "Q018",
+    "question": "公司股票今天的收盤價是多少？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "Q019",
+    "question": "員工申請特休假需要提前幾天提出？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "Q020",
+    "question": "台灣的首都是哪一個城市？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  }
+]
