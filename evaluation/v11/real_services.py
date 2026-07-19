@@ -1,44 +1,84 @@
-"""RealTrialServiceProvider（Slice 2 §九）。
+"""RealTrialServiceProvider（Slice 2 §九 / Slice 3 §十九）。
 
-以正式 app 服務（EmbeddingService / IndexingService / RetrievalService / VectorStore）
-實作 :class:`~evaluation.v11.trial_runner.TrialServiceProvider`，供 CLI / 整合測試使用。
+以正式 app 服務（EmbeddingService / RetrievalService / VectorStore + Loader / Canonical
+Builder）實作 :class:`~evaluation.v11.trial_runner.TrialServiceProvider`，並於 Slice 3 加入：
 
-隔離保證：
-- 每 Trial 使用獨立 collection（``optimizer_`` 前綴）、獨立暫存 SQLite / Upload 目錄。
-- **永不**觸碰正式 ``factory_knowledge``、正式 ``metadata.db``、正式 uploads。
-- 刪除 collection 前一律驗證 ``optimizer_`` 前綴（防誤刪）。
+- 依 Trial Config 選 :class:`ChunkingStrategy`（current / fixed / paragraph / heading）。
+- 以 :class:`CachingDocumentEmbeddingService` 對 **document chunk embedding** 加 persistent
+  cache（cache DB 為獨立、可注入路徑；跨同一 Run 的 Trial 共用 → 相同文字重用向量）。
+- Query embedding 一律用底層服務（不快取，§十七.10）。
+
+隔離保證（不變）：
+- 每 Trial 獨立 ``optimizer_`` 前綴 collection；刪除前一律驗證前綴。
+- **永不**觸碰正式 ``factory_knowledge`` / 正式 ``metadata.db`` / 正式 uploads。
+- 正式 IndexingService / TextSplitter **完全不使用、不修改**——Trial 索引走本模組的隔離管線
+  （``current`` strategy 仍委派正式 TextSplitter 核心，故與正式切分 byte-identical）。
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Optional
 
+from evaluation.v11.chunking import ChunkingConfig, ChunkingContext, build_strategy
+from evaluation.v11.embedding_cache import (
+    CachingDocumentEmbeddingService,
+    EmbeddingCacheRepository,
+)
+from evaluation.v11.embedding_fingerprint import EmbeddingFingerprint
+from evaluation.v11.hashing import config_hash
 from evaluation.v11.retrieval_metrics import IndexChunk, RankedResult
 from evaluation.v11.run_models import TrialConfig
 from evaluation.v11.trial_collections import assert_deletable
 from evaluation.v11.trial_runner import IndexOutcome, RetrievalOutcome
+
+# 副檔名 → canonical document_type（offset scope：pdf=page、其餘=document）。
+_DOCUMENT_TYPES = {
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".txt": "txt",
+    ".pdf": "pdf",
+}
 
 
 @dataclass
 class _TrialContext:
     store: object
     retrieval: object
-    workdir: str
 
 
 class RealTrialServiceProvider:
-    """真實服務 provider；embedding 與 qdrant client 共用，per-trial 建 collection-scoped 服務。"""
+    """真實服務 provider；embedding / qdrant client / cache repo 於整個 Run 共用。"""
 
-    def __init__(self, client, embedding, base_workdir: str, base_settings):
+    def __init__(
+        self,
+        client,
+        embedding,
+        base_workdir: str,
+        base_settings,
+        *,
+        cache_db_path: Optional[str] = None,
+        cache_enabled: bool = True,
+    ):
         self._client = client
         self._embedding = embedding
         self._base_workdir = base_workdir
         self._base_settings = base_settings
         self._contexts: dict[str, _TrialContext] = {}
         os.makedirs(base_workdir, exist_ok=True)
+        # 獨立、可注入的 embedding cache DB（**不**混入正式 metadata.db / optimizer run DB）。
+        self._cache_enabled = cache_enabled
+        self._cache_db_path = cache_db_path or os.path.join(
+            base_workdir, "optimizer.embedding-cache.db"
+        )
+        self._cache_repo: Optional[EmbeddingCacheRepository] = (
+            EmbeddingCacheRepository(self._cache_db_path) if cache_enabled else None
+        )
+        self._fingerprint: Optional[EmbeddingFingerprint] = None
+        self._caching: Optional[CachingDocumentEmbeddingService] = None
 
     @classmethod
     def create(
@@ -48,6 +88,8 @@ class RealTrialServiceProvider:
         *,
         base_settings=None,
         embedding=None,
+        cache_db_path: Optional[str] = None,
+        cache_enabled: bool = True,
     ) -> "RealTrialServiceProvider":
         from app.core.config import Settings
         from app.dependencies import create_qdrant_client
@@ -62,38 +104,45 @@ class RealTrialServiceProvider:
                 max_tokens=settings.embedding_max_tokens,
             )
         client = create_qdrant_client(qdrant_url)
-        return cls(client, embedding, base_workdir, settings)
+        return cls(
+            client, embedding, base_workdir, settings,
+            cache_db_path=cache_db_path, cache_enabled=cache_enabled,
+        )
+
+    # ------------------------------------------------------------------
+    def _caching_service(self) -> CachingDocumentEmbeddingService:
+        """惰性建立跨 Trial 共用的 caching document embedding service。"""
+        if self._caching is None:
+            self._fingerprint = EmbeddingFingerprint.from_service(
+                self._embedding, normalize_embeddings=True
+            )
+            self._caching = CachingDocumentEmbeddingService(
+                self._embedding,
+                self._cache_repo,
+                self._fingerprint,
+                enabled=self._cache_enabled,
+            )
+        return self._caching
 
     # --- provider API ---
     def build_index(
         self, collection_name: str, trial_config: TrialConfig, files: list[tuple[str, str]]
     ) -> IndexOutcome:
-        from app.core.config import Settings
-        from app.repositories.document_repository import DocumentRepository
-        from app.services.indexing_service import IndexingService
+        from app.services.canonical_builder import build_canonical_document
+        from app.services.document_loader import load_document
+        from app.services.retrieval_service import RetrievalService
         from app.services.vector_store import VectorStore
 
-        assert_deletable(collection_name)  # 確保是 optimizer_ 前綴（防誤用正式名稱）
+        assert_deletable(collection_name)  # optimizer_ 前綴（防誤用正式名稱）
 
-        base = self._base_settings
-        chunk = trial_config.chunk_config or {}
-        workdir = os.path.join(self._base_workdir, f"trial_{uuid.uuid4().hex[:8]}")
-        os.makedirs(workdir, exist_ok=True)
-        settings = Settings(
-            app_env="optimizer",
-            qdrant_url=base.qdrant_url,
-            qdrant_collection=collection_name,
-            sqlite_path=os.path.join(workdir, "trial_metadata.db"),
-            upload_dir=os.path.join(workdir, "uploads"),
-            chunk_size_chars=int(chunk.get("chunk_size_chars", base.chunk_size_chars)),
-            chunk_overlap_chars=int(chunk.get("chunk_overlap_chars", base.chunk_overlap_chars)),
-            embedding_max_tokens=base.embedding_max_tokens,
-            retrieval_score_threshold=trial_config.score_threshold,
-            retrieval_max_top_k=max(trial_config.top_k, 10),
-        )
+        chunk_cfg = ChunkingConfig.from_raw(trial_config.chunk_config or {"strategy": "current"})
+        chunk_cfg_hash = config_hash(chunk_cfg.to_canonical_dict())
+        strategy = build_strategy(chunk_cfg.strategy)
+        caching = self._caching_service()
+        caching.reset_stats()
 
         store = VectorStore(self._client, collection_name)
-        # 隔離：確保 collection 為全新（存在則先刪，只刪 optimizer_ 前綴）
+        # 隔離：確保 collection 為全新（存在則先刪，只刪 optimizer_ 前綴）。
         try:
             if self._client.collection_exists(collection_name):
                 assert_deletable(collection_name)
@@ -102,36 +151,96 @@ class RealTrialServiceProvider:
             pass
 
         start = time.perf_counter()
-        store.ensure_collection(self._embedding.dimension)
-        repo = DocumentRepository(settings.sqlite_path)
-        indexing = IndexingService(settings, repo, self._embedding, store)
+        store.ensure_collection(caching.dimension)
+
+        total_chunks = 0
+        fallback_count = 0
+        fallback_reasons: list[str] = []
+        context_added = 0
+        context_reduced = 0
+
         for name, abs_path in files:
             with open(abs_path, "rb") as f:
                 raw = f.read()
-            indexing.index_document(name, raw)
-        build_time_ms = int((time.perf_counter() - start) * 1000)
+            file_hash = hashlib.sha256(raw).hexdigest()
+            elements = load_document(name, raw)
+            ext = os.path.splitext(name.lower())[1]
+            document_type = _DOCUMENT_TYPES.get(ext, "txt")
+            canonical = build_canonical_document(
+                filename=name,
+                document_sha256=file_hash,
+                document_type=document_type,
+                elements=elements,
+            )
+            ctx = ChunkingContext(
+                document_id=str(uuid.uuid4()),
+                filename=name,
+                file_hash=file_hash,
+                canonical=canonical,
+                elements=elements,
+                config=chunk_cfg,
+                count_tokens=caching.count_tokens,
+            )
+            outcome = strategy.chunk(ctx)
+            if not outcome.chunks:
+                continue
+            vectors = caching.embed_documents([c.text for c in outcome.chunks])
+            store.upsert_chunks(outcome.chunks, vectors)
+            total_chunks += len(outcome.chunks)
+            fallback_count += outcome.fallback_count
+            fallback_reasons.extend(outcome.fallback_reasons)
+            context_added += outcome.context_added_count
+            context_reduced += outcome.context_reduced_count
 
+        build_time_ms = int((time.perf_counter() - start) * 1000)
         point_count = self._client.count(collection_name).count
 
-        from app.services.retrieval_service import RetrievalService
-
         retrieval = RetrievalService(
-            self._embedding,
+            self._embedding,  # query embedding 走底層（不快取，§十七.10）
             store,
             score_threshold=trial_config.score_threshold,
             candidate_multiplier=trial_config.candidate_multiplier,
             candidate_cap=trial_config.candidate_cap,
         )
-        self._contexts[collection_name] = _TrialContext(store, retrieval, workdir)
-        return IndexOutcome(point_count=point_count, build_time_ms=build_time_ms)
+        self._contexts[collection_name] = _TrialContext(store, retrieval)
+
+        assert self._fingerprint is not None
+        stats = {
+            "stats_version": "v1",
+            "strategy": chunk_cfg.strategy,
+            "chunk_config": chunk_cfg.to_canonical_dict(),
+            "chunk_config_hash": chunk_cfg_hash,
+            # 可重現性語意（Slice 3 §一）：chunk_config 為 Trial 明確展開的值，
+            # **非**執行環境 .env / Settings 覆寫後的即時 Production Config。
+            "chunk_config_origin": "explicit_trial_config",
+            "chunk_count": total_chunks,
+            "strategy_fallback_count": fallback_count,
+            "strategy_fallback_reasons": sorted(set(fallback_reasons)),
+            "section_prefix_enabled": chunk_cfg.prepend_section_title,
+            "context_config": {
+                "context_before_paragraphs": chunk_cfg.context_before_paragraphs,
+                "context_after_paragraphs": chunk_cfg.context_after_paragraphs,
+            },
+            "context_added_count": context_added,
+            "context_reduced_count": context_reduced,
+            "index_build_time_ms": build_time_ms,
+            "embedding_cache": caching.snapshot_stats().to_dict(),
+            "embedding_fingerprint": self._fingerprint.to_canonical_dict(),
+            "embedding_fingerprint_hash": self._fingerprint.fingerprint_hash(),
+            "cache_schema_version": self._fingerprint.cache_schema_version,
+        }
+        return IndexOutcome(
+            point_count=point_count,
+            build_time_ms=build_time_ms,
+            chunk_count=total_chunks,
+            strategy=chunk_cfg.strategy,
+            chunk_config_hash=chunk_cfg_hash,
+            stats=stats,
+        )
 
     def index_manifest(self, collection_name: str) -> list[IndexChunk]:
-        """單次 scroll 該 Trial 自己的 collection，取回全部 Chunk 作為 Index Universe。
-
-        僅該 Trial 的 collection（``optimizer_`` 前綴），不觸碰正式 ``factory_knowledge``；
-        不做向量檢索（scroll 為列舉），也不為每題重複 scroll。
-        """
-        assert_deletable(collection_name)  # 前綴保護（順帶確保非正式 collection）
+        """單次 scroll 該 Trial 自己的 collection，取回全部 Chunk 作為 Index Universe。"""
+        assert_deletable(collection_name)  # 前綴保護
         chunks: list[IndexChunk] = []
         next_offset = None
         while True:

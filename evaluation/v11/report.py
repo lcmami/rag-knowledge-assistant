@@ -23,6 +23,15 @@ KNOWN_LIMITATIONS = [
     "評估樣本小（約 12 case 級）；小樣本指標為低可信度，附樣本數。",
     "Graded NDCG / Evidence Coverage 僅在 gold evidence 具 offset 時計算；"
     "anchor-only 標為不可計算，不以 0 假裝。",
+    "Slice 3 只快取 Document Chunk Embedding；Query Embedding 不快取（避免污染 latency）。"
+    "Embedding Cache 為獨立 SQLite（*.embedding-cache.db），本 Slice 不做 LRU/TTL/容量管理，"
+    "跨 Run 預設使用臨時 cache（run 結束清除）。",
+    # §一：current strategy 的可重現性語意（Slice 3 收尾要求）。
+    "current strategy means the repository-defined reproducible v1.0 default behavior. "
+    "It does not automatically mirror environment-specific chunking overrides. "
+    "每個 Trial 保存完整展開的 chunk_config（含 target_chars/overlap_chars/max_tokens），"
+    "config hash 涵蓋展開後的實際值，chunk_config_origin=explicit_trial_config；Optimizer 不讀取 "
+    ".env / Settings 覆寫值。若要評估 Production Active Config，須由使用者明確匯出為 Trial Config。",
 ]
 
 
@@ -98,6 +107,10 @@ def build_report(
         if t.error:
             errors.append({"scope": f"trial:{t.trial_name}", "error": t.error})
 
+        # Slice 3（§二十三）：Chunking + Embedding Cache 統計（版本化 JSON blob）。
+        chunk_cache_stats = (
+            json.loads(t.chunk_cache_stats_json) if t.chunk_cache_stats_json else None
+        )
         trial_blocks.append(
             {
                 "trial_id": t.trial_id,
@@ -113,6 +126,10 @@ def build_report(
                 "retrieval_time_ms": t.retrieval_time_ms,
                 "attempt_count": t.attempt_count,
                 "error": t.error,
+                "strategy": t.strategy,
+                "chunk_count": t.chunk_count,
+                "chunk_config_hash": t.chunk_config_hash,
+                "chunk_cache_stats": chunk_cache_stats,
                 "aggregate_metrics": [_metric_to_dict(m) for m in metrics if m.scope == "aggregate"],
                 "per_query_type_metrics": [
                     _metric_to_dict(m) for m in metrics if m.scope == "query_type"
@@ -169,6 +186,46 @@ def _fmt_metric(m: dict[str, Any]) -> str:
     return f"{val_s}{suffix}"
 
 
+def _render_chunk_cache(ap, t: dict[str, Any]) -> None:
+    """Slice 3（§二十三）：Chunking + Embedding Cache 統計。
+
+    **不**輸出 embedding vectors / chunk 全文 / API key / 私人絕對路徑（stats blob 本身不含）。
+    """
+    stats = t.get("chunk_cache_stats")
+    if not stats:
+        return
+    ap("### Chunking + Embedding Cache")
+    ctx = stats.get("context_config") or {}
+    ap(f"- Strategy: **{stats.get('strategy')}** · Chunk Config Hash: "
+       f"`{(stats.get('chunk_config_hash') or '')[:12]}…`")
+    ap(f"- Chunk Config Origin: **{stats.get('chunk_config_origin', 'explicit_trial_config')}** "
+       f"（不讀 .env / Settings 覆寫）")
+    ap(f"- Chunk Count: {stats.get('chunk_count')} · Section Prefix: "
+       f"**{stats.get('section_prefix_enabled')}**")
+    ap(f"- Strategy Fallback: {stats.get('strategy_fallback_count')} "
+       f"{stats.get('strategy_fallback_reasons') or []}")
+    ap(f"- Context: before={ctx.get('context_before_paragraphs', 0)} "
+       f"after={ctx.get('context_after_paragraphs', 0)} · added={stats.get('context_added_count')} "
+       f"· reduced={stats.get('context_reduced_count')}")
+    fp = stats.get("embedding_fingerprint") or {}
+    ap(f"- Embedding Fingerprint: `{(stats.get('embedding_fingerprint_hash') or '')[:12]}…` "
+       f"(model=`{fp.get('model_name')}` dim={fp.get('dimension')} "
+       f"revision=`{fp.get('model_revision')}` cache_schema=`{stats.get('cache_schema_version')}`)")
+    cache = stats.get("embedding_cache") or {}
+    rate = cache.get("embedding_cache_hit_rate")
+    rate_s = f"{rate:.4f}" if isinstance(rate, float) else "n/a"
+    ap(f"- Embedding Cache Enabled: **{cache.get('cache_enabled')}**")
+    ap(f"- Unique Embedding Text: {cache.get('unique_embedding_text_count')} · "
+       f"Persistent Hits: {cache.get('embedding_cache_hit_count')} · "
+       f"Misses: {cache.get('embedding_cache_miss_count')} · "
+       f"Batch Dedup Savings: {cache.get('batch_dedup_savings')}")
+    ap(f"- Underlying Model Text Count: {cache.get('embedding_model_call_text_count')} · "
+       f"Corrupt: {cache.get('embedding_cache_corrupt_count')} · "
+       f"Write Failures: {cache.get('embedding_cache_write_failure_count')} · "
+       f"Hit Rate: {rate_s}")
+    ap("")
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     lines: list[str] = []
     ap = lines.append
@@ -204,6 +261,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         if t["error"]:
             ap(f"- Error: `{t['error']}`")
         ap("")
+        _render_chunk_cache(ap, t)
         ap("### Aggregate Metrics")
         ap("| metric | value |")
         ap("| --- | --- |")

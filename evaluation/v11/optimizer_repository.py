@@ -155,10 +155,23 @@ _MIGRATION_0002 = [
     """,
 ]
 
+# --------------------------------------------------------------------------
+# Slice 3（§十八 / §二十三）：Chunking + Embedding Cache 統計欄位（additive）。
+# 以獨立 migration 追加欄位；舊 DB 只跑一次（migration runner 依版本 idempotent）。
+# 均在**獨立 Optimizer DB**，永不加入正式 metadata.db。
+# --------------------------------------------------------------------------
+_MIGRATION_0003 = [
+    "ALTER TABLE retrieval_trials ADD COLUMN strategy TEXT",
+    "ALTER TABLE retrieval_trials ADD COLUMN chunk_config_hash TEXT",
+    "ALTER TABLE retrieval_trials ADD COLUMN chunk_count INTEGER",
+    "ALTER TABLE retrieval_trials ADD COLUMN chunk_cache_stats_json TEXT",
+]
+
 # (version, [statements])
 MIGRATIONS: list[tuple[str, list[str]]] = [
     ("0001_initial", _MIGRATION_0001),
     ("0002_runs_trials", _MIGRATION_0002),
+    ("0003_chunk_cache_stats", _MIGRATION_0003),
 ]
 
 _SCHEMA_MIGRATIONS_DDL = """
@@ -440,6 +453,7 @@ class OptimizerRepository:
         "config_hash", "collection_name", "started_at", "completed_at",
         "index_build_time_ms", "retrieval_time_ms", "point_count", "cleanup_status",
         "error", "attempt_count",
+        "strategy", "chunk_config_hash", "chunk_count", "chunk_cache_stats_json",
     )
 
     def upsert_trial(self, trial: RetrievalTrial) -> None:
@@ -450,6 +464,8 @@ class OptimizerRepository:
             trial.started_at, trial.completed_at, trial.index_build_time_ms,
             trial.retrieval_time_ms, trial.point_count, trial.cleanup_status,
             trial.error, trial.attempt_count,
+            trial.strategy, trial.chunk_config_hash, trial.chunk_count,
+            trial.chunk_cache_stats_json,
         )
         placeholders = ",".join("?" for _ in self._TRIAL_COLUMNS)
         updates = ",".join(f"{c}=excluded.{c}" for c in self._TRIAL_COLUMNS if c != "trial_id")
@@ -482,7 +498,19 @@ class OptimizerRepository:
             cleanup_status=row["cleanup_status"],
             error=row["error"],
             attempt_count=row["attempt_count"],
+            strategy=self._row_get(row, "strategy"),
+            chunk_config_hash=self._row_get(row, "chunk_config_hash"),
+            chunk_count=self._row_get(row, "chunk_count"),
+            chunk_cache_stats_json=self._row_get(row, "chunk_cache_stats_json"),
         )
+
+    @staticmethod
+    def _row_get(row: sqlite3.Row, key: str):
+        """安全讀取欄位（舊 row 缺 Slice 3 欄位時回 None，向後相容）。"""
+        try:
+            return row[key]
+        except (IndexError, KeyError):
+            return None
 
     def get_trial(self, trial_id: str) -> RetrievalTrial | None:
         conn = self._connect()

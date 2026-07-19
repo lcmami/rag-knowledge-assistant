@@ -37,7 +37,12 @@ def _trial(trial_id="t1", run_id="r1", ordinal=0, config_hash="h1", **over) -> R
 
 def test_migration_0002_applied(tmp_path):
     repo = _repo(tmp_path)
-    assert repo.applied_migrations() == ["0001_initial", "0002_runs_trials"]
+    # Slice 3 追加 additive migration 0003_chunk_cache_stats（0001/0002 不變）。
+    assert repo.applied_migrations() == [
+        "0001_initial",
+        "0002_runs_trials",
+        "0003_chunk_cache_stats",
+    ]
 
 
 def test_slice2_tables_exist_no_documents_table(tmp_path):

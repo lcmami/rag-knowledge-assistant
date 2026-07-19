@@ -63,6 +63,13 @@ IDENTIFIER_NORMALIZATION_VERSION = "v1"
 class IndexOutcome:
     point_count: int
     build_time_ms: int
+    # Slice 3（§十八 / §二十三）：Chunking + Embedding Cache 統計（fake / 舊 provider 用預設值）。
+    chunk_count: Optional[int] = None
+    strategy: Optional[str] = None
+    chunk_config_hash: Optional[str] = None
+    # 版本化 stats blob：{strategy, chunk_config, fallback, section_prefix, context,
+    # cache_stats, embedding_fingerprint, ...}（持久化於 retrieval_trials.chunk_cache_stats_json）。
+    stats: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -365,6 +372,13 @@ def _execute_trial(
         trial.cleanup_status = CleanupStatus.ACTIVE
         trial.point_count = idx.point_count
         trial.index_build_time_ms = idx.build_time_ms
+        # Slice 3：持久化 Chunking + Cache 統計（在 metrics / cleanup 之前）。
+        trial.chunk_count = idx.chunk_count if idx.chunk_count is not None else idx.point_count
+        trial.strategy = idx.strategy
+        trial.chunk_config_hash = idx.chunk_config_hash
+        trial.chunk_cache_stats_json = (
+            hashing.canonical_json(idx.stats) if idx.stats else None
+        )
         repo.upsert_trial(trial)
 
         # Index Universe（該 Trial 全部 Chunk）供 trial_index_gold NDCG 的 IDCG；

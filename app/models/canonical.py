@@ -43,9 +43,13 @@ class ProvenanceSpan:
     offset_scope: str
     char_start: int
     char_end: int
+    # v1.1 Slice 3（§十二）：core = 核心 evidence 範圍；context = 相鄰段落 context。
+    # 向後相容的選填欄位——舊資料缺此欄位時預設 ``core``；序列化時**僅在非預設值才輸出**，
+    # 確保 v1.0 / Slice 1-2 既有 payload byte-identical（正式 Qdrant payload 不變）。
+    role: str = "core"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "document_sha256": self.document_sha256,
             "canonical_text_version": self.canonical_text_version,
             "loader_version": self.loader_version,
@@ -56,6 +60,9 @@ class ProvenanceSpan:
             "char_start": self.char_start,
             "char_end": self.char_end,
         }
+        if self.role != "core":
+            d["role"] = self.role
+        return d
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ProvenanceSpan":
@@ -69,6 +76,7 @@ class ProvenanceSpan:
             offset_scope=raw["offset_scope"],
             char_start=raw["char_start"],
             char_end=raw["char_end"],
+            role=raw.get("role", "core"),
         )
 
 

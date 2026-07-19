@@ -17,12 +17,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from evaluation.v11.chunking.config import (
+    SUPPORTED_STRATEGIES,
+    ChunkConfigError,
+    ChunkingConfig,
+)
 from evaluation.v11.hashing import canonical_json, config_hash
 
 CONFIG_SCHEMA_VERSION = "1.0"
 
-# 本 Slice 唯一支援的 chunking strategy（沿用正式服務現況）。
-SUPPORTED_CHUNK_STRATEGIES = {"current"}
+# Slice 3：支援 current / fixed / paragraph / heading（明確列出的 chunking 搜尋空間）。
+SUPPORTED_CHUNK_STRATEGIES = set(SUPPORTED_STRATEGIES)
 
 
 # --- 狀態常數（§六：語意清楚且有測試）---
@@ -128,15 +133,15 @@ class TrialConfig:
         if not isinstance(name, str) or not name.strip():
             raise RunConfigError(f"trials[{index}] 缺少 trial_name。")
 
-        chunk_config = raw.get("chunk_config") or {"strategy": "current"}
-        if not isinstance(chunk_config, dict):
+        raw_chunk = raw.get("chunk_config") or {"strategy": "current"}
+        if not isinstance(raw_chunk, dict):
             raise RunConfigError(f"trials[{index}] chunk_config 必須是物件。")
-        strategy = chunk_config.get("strategy", "current")
-        if strategy not in SUPPORTED_CHUNK_STRATEGIES:
-            raise RunConfigError(
-                f"trials[{index}] 不支援的 chunk strategy={strategy!r}；"
-                f"本 Slice 僅支援 {sorted(SUPPORTED_CHUNK_STRATEGIES)}。"
-            )
+        # 嚴格驗證 + canonical 化（§六）：以 canonical dict 作為 chunk_config，確保 config_hash
+        # 涵蓋所有有效 chunk 欄位（含 prefix_format_version）且與 JSON key 順序無關。
+        try:
+            chunk_config = ChunkingConfig.from_raw(raw_chunk).to_canonical_dict()
+        except ChunkConfigError as exc:
+            raise RunConfigError(f"trials[{index}] chunk_config 無效：{exc}") from exc
 
         retrieval = raw.get("retrieval_config") or {}
         if not isinstance(retrieval, dict):
@@ -287,6 +292,13 @@ class RetrievalTrial:
     cleanup_status: str = CleanupStatus.NOT_CREATED
     error: Optional[str] = None
     attempt_count: int = 0
+    # Slice 3（§十八 / §二十三）：Chunking + Embedding Cache 統計。
+    # ``chunk_cache_stats_json`` 為版本化 JSON blob（chunk config / strategy fallback /
+    # section prefix / context / cache stats / embedding fingerprint）。
+    strategy: Optional[str] = None
+    chunk_config_hash: Optional[str] = None
+    chunk_count: Optional[int] = None
+    chunk_cache_stats_json: Optional[str] = None
 
 
 @dataclass
