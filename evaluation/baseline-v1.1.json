@@ -1,0 +1,1459 @@
+{
+  "config": {
+    "label": "baseline-v1.1",
+    "corpus_dirs": [
+      "sample_docs",
+      "fixtures"
+    ],
+    "cases_path": "cases.json",
+    "collection": "factory_baseline_v1_1",
+    "top_k": 5,
+    "candidate_multiplier": 3,
+    "candidate_cap": 50,
+    "score_threshold": 0.0,
+    "report_threshold": 0.55,
+    "thresholds": [
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7
+    ],
+    "seed": 20240501
+  },
+  "environment": {
+    "embedding_model": "BAAI/bge-small-zh-v1.5",
+    "vector_size": 512,
+    "distance": "Cosine",
+    "chunk_size_chars": 600,
+    "chunk_overlap_chars": 100,
+    "embedding_max_tokens": 480,
+    "python_version": "3.10.11",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "git": {
+      "commit": "98884e90d5490656d40533df84b1696289d4d5b0",
+      "branch": "feature/v1.1-retrieval-optimizer",
+      "working_tree_dirty": false
+    }
+  },
+  "corpus": {
+    "documents": [
+      {
+        "filename": "api_integration_spec.md",
+        "sha256": "680315276611bc0ddf51133a8a8bae91c051e8336134d506f01e45b9fcb81efa",
+        "bytes": 1180
+      },
+      {
+        "filename": "confusable_alarm_d900.md",
+        "sha256": "c55288e033fd955b894f0a435fed3b22b3ea93fcefb93570055a72858ba56407",
+        "bytes": 1633
+      },
+      {
+        "filename": "equipment_alarm_manual.md",
+        "sha256": "042f36719ba2dcf433554ccfbe84349e54d22ea49158099229fe6586cd1247cc",
+        "bytes": 1545
+      },
+      {
+        "filename": "equipment_maintenance_manual.pdf",
+        "sha256": "490ff764f373e3080021fe0594b43fa1889f68250435224c2f13332a7cd97174",
+        "bytes": 38947
+      },
+      {
+        "filename": "manufacturing_data_dictionary.txt",
+        "sha256": "9e12848195e2d2b87668ccbf1867b087ed284ce4e59fbc0c31a4c4bef2af1137",
+        "bytes": 1153
+      },
+      {
+        "filename": "mes_operation_sop.md",
+        "sha256": "8432bccf03a1c950ff3fa59a9e8b0810bfa549abcf6e6e4f39a4b4dd888ad9af",
+        "bytes": 1333
+      }
+    ],
+    "document_count": 6,
+    "corpus_hash": "9f575f0c912b161cb048a421cc07da619bb3957ab5f6a7334a4290d2b09d8ece",
+    "ingested_chunk_counts": {
+      "api_integration_spec.md": 5,
+      "confusable_alarm_d900.md": 4,
+      "equipment_alarm_manual.md": 5,
+      "equipment_maintenance_manual.pdf": 5,
+      "manufacturing_data_dictionary.txt": 1,
+      "mes_operation_sop.md": 4
+    },
+    "total_chunks": 24
+  },
+  "dataset": {
+    "cases_file": "cases.json",
+    "case_count": 15,
+    "dataset_hash": "181a00a20712b2f1d485b52484fcc008e836580961822eb43fdd870e6cff1334"
+  },
+  "metrics": {
+    "total_questions": 15,
+    "answerable_count": 11,
+    "unanswerable_count": 4,
+    "hit_at_1": 0.7273,
+    "hit_at_1_considered": 11,
+    "hit_at_3": 1.0,
+    "hit_at_3_considered": 11,
+    "section_hit_at_1": 0.6364,
+    "section_hit_considered": 11,
+    "page_hit_at_1": 1.0,
+    "page_hit_considered": 2,
+    "average_latency_ms": 26.53,
+    "p50_latency_ms": 29.0,
+    "p95_latency_ms": 35.8,
+    "answerable_score_summary": {
+      "count": 11,
+      "min": 0.6096,
+      "p25": 0.7017,
+      "median": 0.7251,
+      "mean": 0.7264,
+      "p75": 0.7762,
+      "max": 0.828
+    },
+    "unanswerable_score_summary": {
+      "count": 4,
+      "min": 0.3054,
+      "p25": 0.346,
+      "median": 0.4059,
+      "mean": 0.4039,
+      "p75": 0.4639,
+      "max": 0.4986
+    },
+    "hit_at_5": 1.0,
+    "recall_at_5": 1.0,
+    "hit_at_5_considered": 11,
+    "mrr": 0.8636,
+    "mrr_considered": 11,
+    "exact_code_top1": {
+      "accuracy": 0.75,
+      "hits": 3,
+      "considered": 4,
+      "miss_ids": [
+        "C01"
+      ]
+    },
+    "confusable_code_error": {
+      "rate": 0.4,
+      "errors": 2,
+      "considered": 5,
+      "error_ids": [
+        "C01",
+        "C10"
+      ]
+    },
+    "unanswerable_false_positive": {
+      "threshold": 0.55,
+      "rate": 0.0,
+      "false_positives": 0,
+      "considered": 4,
+      "false_positive_ids": []
+    },
+    "by_query_type": {
+      "confusable": {
+        "count": 2,
+        "case_ids": [
+          "C10",
+          "C11"
+        ],
+        "hit_at_1": 0.0,
+        "hit_at_1_considered": 2,
+        "hit_at_5": 1.0,
+        "hit_at_5_considered": 2,
+        "mrr": 0.5,
+        "mrr_considered": 2
+      },
+      "exact_code": {
+        "count": 4,
+        "case_ids": [
+          "C01",
+          "C02",
+          "C03",
+          "C04"
+        ],
+        "hit_at_1": 0.75,
+        "hit_at_1_considered": 4,
+        "hit_at_5": 1.0,
+        "hit_at_5_considered": 4,
+        "mrr": 0.875,
+        "mrr_considered": 4
+      },
+      "semantic": {
+        "count": 5,
+        "case_ids": [
+          "C05",
+          "C06",
+          "C07",
+          "C08",
+          "C09"
+        ],
+        "hit_at_1": 1.0,
+        "hit_at_1_considered": 5,
+        "hit_at_5": 1.0,
+        "hit_at_5_considered": 5,
+        "mrr": 1.0,
+        "mrr_considered": 5
+      },
+      "unanswerable": {
+        "count": 4,
+        "case_ids": [
+          "C12",
+          "C13",
+          "C14",
+          "C15"
+        ],
+        "hit_at_1": 0.0,
+        "hit_at_1_considered": 0,
+        "hit_at_5": 0.0,
+        "hit_at_5_considered": 0,
+        "mrr": 0.0,
+        "mrr_considered": 0
+      }
+    }
+  },
+  "threshold_at_configured": {
+    "threshold": 0.55,
+    "answerable_accept_rate": 1.0,
+    "answerable_false_reject_rate": 0.0,
+    "unanswerable_refuse_rate": 1.0,
+    "unanswerable_false_accept_rate": 0.0,
+    "precision": 0.7273,
+    "false_accepted_unanswerable_ids": [],
+    "false_rejected_answerable_ids": []
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.3,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.0,
+      "unanswerable_false_accept_rate": 1.0,
+      "precision": 0.5333,
+      "false_accepted_unanswerable_ids": [
+        "C12",
+        "C13",
+        "C14",
+        "C15"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.35,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.25,
+      "unanswerable_false_accept_rate": 0.75,
+      "precision": 0.5714,
+      "false_accepted_unanswerable_ids": [
+        "C12",
+        "C14",
+        "C15"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.4,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.5,
+      "unanswerable_false_accept_rate": 0.5,
+      "precision": 0.6154,
+      "false_accepted_unanswerable_ids": [
+        "C12",
+        "C14"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.45,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 0.5,
+      "unanswerable_false_accept_rate": 0.5,
+      "precision": 0.6154,
+      "false_accepted_unanswerable_ids": [
+        "C12",
+        "C14"
+      ],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.5,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 1.0,
+      "unanswerable_false_accept_rate": 0.0,
+      "precision": 0.7273,
+      "false_accepted_unanswerable_ids": [],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.55,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 1.0,
+      "unanswerable_false_accept_rate": 0.0,
+      "precision": 0.7273,
+      "false_accepted_unanswerable_ids": [],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.6,
+      "answerable_accept_rate": 1.0,
+      "answerable_false_reject_rate": 0.0,
+      "unanswerable_refuse_rate": 1.0,
+      "unanswerable_false_accept_rate": 0.0,
+      "precision": 0.7273,
+      "false_accepted_unanswerable_ids": [],
+      "false_rejected_answerable_ids": []
+    },
+    {
+      "threshold": 0.65,
+      "answerable_accept_rate": 0.8182,
+      "answerable_false_reject_rate": 0.1818,
+      "unanswerable_refuse_rate": 1.0,
+      "unanswerable_false_accept_rate": 0.0,
+      "precision": 0.6667,
+      "false_accepted_unanswerable_ids": [],
+      "false_rejected_answerable_ids": [
+        "C02",
+        "C07"
+      ]
+    },
+    {
+      "threshold": 0.7,
+      "answerable_accept_rate": 0.7273,
+      "answerable_false_reject_rate": 0.2727,
+      "unanswerable_refuse_rate": 1.0,
+      "unanswerable_false_accept_rate": 0.0,
+      "precision": 0.625,
+      "false_accepted_unanswerable_ids": [],
+      "false_rejected_answerable_ids": [
+        "C02",
+        "C07",
+        "C09"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "C01",
+      "question": "設備出現 E102 警報時應如何處理？",
+      "query_type": "exact_code",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E102 感測器通訊異常",
+      "expected_page": null,
+      "confusable_document": "confusable_alarm_d900.md",
+      "top1_score": 0.707,
+      "top1_document": "confusable_alarm_d900.md",
+      "top1_section": "與 E102 的差異",
+      "top1_page": null,
+      "top3_documents": [
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md"
+      ],
+      "ranked_documents": [
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "confusable_alarm_d900.md",
+          "section": "與 E102 的差異",
+          "page": null,
+          "score": 0.707
+        },
+        {
+          "rank": 2,
+          "document": "equipment_alarm_manual.md",
+          "section": "E102 感測器通訊異常",
+          "page": null,
+          "score": 0.6842
+        },
+        {
+          "rank": 3,
+          "document": "equipment_alarm_manual.md",
+          "section": "警報代碼對照表",
+          "page": null,
+          "score": 0.6689
+        },
+        {
+          "rank": 4,
+          "document": "equipment_alarm_manual.md",
+          "section": "E101 電源模組異常",
+          "page": null,
+          "score": 0.6615
+        },
+        {
+          "rank": 5,
+          "document": "confusable_alarm_d900.md",
+          "section": "D900 安全門異常",
+          "page": null,
+          "score": 0.6583
+        }
+      ],
+      "doc_hit_at_1": false,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": false,
+      "page_hit_at_1": null,
+      "expected_rank": 2,
+      "confusable_rank": 1,
+      "reciprocal_rank": 0.5,
+      "retrieval_time_ms": 21
+    },
+    {
+      "id": "C02",
+      "question": "E102 警報代表什麼？",
+      "query_type": "exact_code",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E102 感測器通訊異常",
+      "expected_page": null,
+      "confusable_document": "confusable_alarm_d900.md",
+      "top1_score": 0.6299,
+      "top1_document": "equipment_alarm_manual.md",
+      "top1_section": "警報代碼對照表",
+      "top1_page": null,
+      "top3_documents": [
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md",
+        "confusable_alarm_d900.md"
+      ],
+      "ranked_documents": [
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md",
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "equipment_alarm_manual.md",
+          "section": "警報代碼對照表",
+          "page": null,
+          "score": 0.6299
+        },
+        {
+          "rank": 2,
+          "document": "confusable_alarm_d900.md",
+          "section": "與 E102 的差異",
+          "page": null,
+          "score": 0.6164
+        },
+        {
+          "rank": 3,
+          "document": "confusable_alarm_d900.md",
+          "section": "警報代碼對照表",
+          "page": null,
+          "score": 0.6023
+        },
+        {
+          "rank": 4,
+          "document": "equipment_alarm_manual.md",
+          "section": "E102 感測器通訊異常",
+          "page": null,
+          "score": 0.5451
+        },
+        {
+          "rank": 5,
+          "document": "equipment_alarm_manual.md",
+          "section": "E203 溫度過高警報",
+          "page": null,
+          "score": 0.5371
+        }
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": false,
+      "page_hit_at_1": null,
+      "expected_rank": 1,
+      "confusable_rank": 2,
+      "reciprocal_rank": 1.0,
+      "retrieval_time_ms": 18
+    },
+    {
+      "id": "C03",
+      "question": "設備顯示 E101 電源模組異常時，操作員應先確認什麼？",
+      "query_type": "exact_code",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E101 電源模組異常",
+      "expected_page": null,
+      "confusable_document": null,
+      "top1_score": 0.828,
+      "top1_document": "equipment_alarm_manual.md",
+      "top1_section": "E101 電源模組異常",
+      "top1_page": null,
+      "top3_documents": [
+        "equipment_alarm_manual.md",
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md"
+      ],
+      "ranked_documents": [
+        "equipment_alarm_manual.md",
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "equipment_alarm_manual.md",
+          "section": "E101 電源模組異常",
+          "page": null,
+          "score": 0.828
+        },
+        {
+          "rank": 2,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "通訊模組檢查",
+          "page": 3,
+          "score": 0.7385
+        },
+        {
+          "rank": 3,
+          "document": "equipment_alarm_manual.md",
+          "section": "E102 感測器通訊異常",
+          "page": null,
+          "score": 0.6959
+        },
+        {
+          "rank": 4,
+          "document": "equipment_alarm_manual.md",
+          "section": "警報代碼對照表",
+          "page": null,
+          "score": 0.6778
+        },
+        {
+          "rank": 5,
+          "document": "confusable_alarm_d900.md",
+          "section": "與 E102 的差異",
+          "page": null,
+          "score": 0.6761
+        }
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "expected_rank": 1,
+      "confusable_rank": null,
+      "reciprocal_rank": 1.0,
+      "retrieval_time_ms": 40
+    },
+    {
+      "id": "C04",
+      "question": "E203 溫度過高警報的安全閾值是攝氏幾度？",
+      "query_type": "exact_code",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E203 溫度過高警報",
+      "expected_page": null,
+      "confusable_document": null,
+      "top1_score": 0.803,
+      "top1_document": "equipment_alarm_manual.md",
+      "top1_section": "E203 溫度過高警報",
+      "top1_page": null,
+      "top3_documents": [
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md"
+      ],
+      "ranked_documents": [
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "equipment_alarm_manual.md",
+          "section": "E203 溫度過高警報",
+          "page": null,
+          "score": 0.803
+        },
+        {
+          "rank": 2,
+          "document": "confusable_alarm_d900.md",
+          "section": "與 E102 的差異",
+          "page": null,
+          "score": 0.5912
+        },
+        {
+          "rank": 3,
+          "document": "equipment_alarm_manual.md",
+          "section": "警報代碼對照表",
+          "page": null,
+          "score": 0.5543
+        },
+        {
+          "rank": 4,
+          "document": "confusable_alarm_d900.md",
+          "section": "安全門警報處理手冊（D900）",
+          "page": null,
+          "score": 0.5492
+        },
+        {
+          "rank": 5,
+          "document": "equipment_alarm_manual.md",
+          "section": "E102 感測器通訊異常",
+          "page": null,
+          "score": 0.5477
+        }
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "expected_rank": 1,
+      "confusable_rank": null,
+      "reciprocal_rank": 1.0,
+      "retrieval_time_ms": 29
+    },
+    {
+      "id": "C05",
+      "question": "感測器無法與控制器正常通訊時應如何排除？",
+      "query_type": "semantic",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E102 感測器通訊異常",
+      "expected_page": null,
+      "confusable_document": "confusable_alarm_d900.md",
+      "top1_score": 0.7814,
+      "top1_document": "equipment_alarm_manual.md",
+      "top1_section": "E102 感測器通訊異常",
+      "top1_page": null,
+      "top3_documents": [
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "ranked_documents": [
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md",
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "equipment_alarm_manual.md",
+          "section": "E102 感測器通訊異常",
+          "page": null,
+          "score": 0.7814
+        },
+        {
+          "rank": 2,
+          "document": "confusable_alarm_d900.md",
+          "section": "與 E102 的差異",
+          "page": null,
+          "score": 0.6934
+        },
+        {
+          "rank": 3,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "通訊模組檢查",
+          "page": 3,
+          "score": 0.6513
+        },
+        {
+          "rank": 4,
+          "document": "equipment_alarm_manual.md",
+          "section": "警報代碼對照表",
+          "page": null,
+          "score": 0.6352
+        },
+        {
+          "rank": 5,
+          "document": "confusable_alarm_d900.md",
+          "section": "D900 安全門異常",
+          "page": null,
+          "score": 0.6147
+        }
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "expected_rank": 1,
+      "confusable_rank": 2,
+      "reciprocal_rank": 1.0,
+      "retrieval_time_ms": 16
+    },
+    {
+      "id": "C06",
+      "question": "CX-500 設備的基本保養每幾小時執行一次？",
+      "query_type": "semantic",
+      "should_answer": true,
+      "expected_document": "equipment_maintenance_manual.pdf",
+      "expected_section": "定期保養週期",
+      "expected_page": 2,
+      "confusable_document": null,
+      "top1_score": 0.7283,
+      "top1_document": "equipment_maintenance_manual.pdf",
+      "top1_section": "定期保養週期",
+      "top1_page": 2,
+      "top3_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "ranked_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "manufacturing_data_dictionary.txt",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "定期保養週期",
+          "page": 2,
+          "score": 0.7283
+        },
+        {
+          "rank": 2,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "異常保養",
+          "page": 3,
+          "score": 0.7012
+        },
+        {
+          "rank": 3,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "設備基本資訊",
+          "page": 1,
+          "score": 0.6709
+        },
+        {
+          "rank": 4,
+          "document": "manufacturing_data_dictionary.txt",
+          "section": null,
+          "page": null,
+          "score": 0.5644
+        },
+        {
+          "rank": 5,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "通訊模組檢查",
+          "page": 3,
+          "score": 0.514
+        }
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": true,
+      "expected_rank": 1,
+      "confusable_rank": null,
+      "reciprocal_rank": 1.0,
+      "retrieval_time_ms": 30
+    },
+    {
+      "id": "C07",
+      "question": "空氣過濾網每幾小時需要清潔一次？",
+      "query_type": "semantic",
+      "should_answer": true,
+      "expected_document": "equipment_maintenance_manual.pdf",
+      "expected_section": "定期保養週期",
+      "expected_page": 2,
+      "confusable_document": null,
+      "top1_score": 0.6096,
+      "top1_document": "equipment_maintenance_manual.pdf",
+      "top1_section": "定期保養週期",
+      "top1_page": 2,
+      "top3_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "ranked_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md",
+        "manufacturing_data_dictionary.txt"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "定期保養週期",
+          "page": 2,
+          "score": 0.6096
+        },
+        {
+          "rank": 2,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "異常保養",
+          "page": 3,
+          "score": 0.5462
+        },
+        {
+          "rank": 3,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "通訊模組檢查",
+          "page": 3,
+          "score": 0.5182
+        },
+        {
+          "rank": 4,
+          "document": "equipment_alarm_manual.md",
+          "section": "E203 溫度過高警報",
+          "page": null,
+          "score": 0.4995
+        },
+        {
+          "rank": 5,
+          "document": "manufacturing_data_dictionary.txt",
+          "section": null,
+          "page": null,
+          "score": 0.4925
+        }
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": true,
+      "expected_rank": 1,
+      "confusable_rank": null,
+      "reciprocal_rank": 1.0,
+      "retrieval_time_ms": 29
+    },
+    {
+      "id": "C08",
+      "question": "MES 工單如何從 WAITING 切換為 RUNNING？",
+      "query_type": "semantic",
+      "should_answer": true,
+      "expected_document": "mes_operation_sop.md",
+      "expected_section": "工單狀態流程",
+      "expected_page": null,
+      "confusable_document": null,
+      "top1_score": 0.7101,
+      "top1_document": "mes_operation_sop.md",
+      "top1_section": "工單狀態流程",
+      "top1_page": null,
+      "top3_documents": [
+        "mes_operation_sop.md",
+        "mes_operation_sop.md",
+        "api_integration_spec.md"
+      ],
+      "ranked_documents": [
+        "mes_operation_sop.md",
+        "mes_operation_sop.md",
+        "api_integration_spec.md",
+        "mes_operation_sop.md",
+        "manufacturing_data_dictionary.txt"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "mes_operation_sop.md",
+          "section": "工單狀態流程",
+          "page": null,
+          "score": 0.7101
+        },
+        {
+          "rank": 2,
+          "document": "mes_operation_sop.md",
+          "section": "工單啟動",
+          "page": null,
+          "score": 0.5778
+        },
+        {
+          "rank": 3,
+          "document": "api_integration_spec.md",
+          "section": "上報工單進度請求欄位",
+          "page": null,
+          "score": 0.5546
+        },
+        {
+          "rank": 4,
+          "document": "mes_operation_sop.md",
+          "section": "MES 系統操作標準作業程序",
+          "page": null,
+          "score": 0.509
+        },
+        {
+          "rank": 5,
+          "document": "manufacturing_data_dictionary.txt",
+          "section": null,
+          "page": null,
+          "score": 0.4962
+        }
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "expected_rank": 1,
+      "confusable_rank": null,
+      "reciprocal_rank": 1.0,
+      "retrieval_time_ms": 33
+    },
+    {
+      "id": "C09",
+      "question": "API Token 的有效時間是多久？",
+      "query_type": "semantic",
+      "should_answer": true,
+      "expected_document": "api_integration_spec.md",
+      "expected_section": "認證與 Token",
+      "expected_page": null,
+      "confusable_document": null,
+      "top1_score": 0.6965,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "認證與 Token",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "api_integration_spec.md",
+        "api_integration_spec.md"
+      ],
+      "ranked_documents": [
+        "api_integration_spec.md",
+        "api_integration_spec.md",
+        "api_integration_spec.md",
+        "mes_operation_sop.md",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "api_integration_spec.md",
+          "section": "認證與 Token",
+          "page": null,
+          "score": 0.6965
+        },
+        {
+          "rank": 2,
+          "document": "api_integration_spec.md",
+          "section": "Token 規格",
+          "page": null,
+          "score": 0.5877
+        },
+        {
+          "rank": 3,
+          "document": "api_integration_spec.md",
+          "section": "生產資料介接 API 規格",
+          "page": null,
+          "score": 0.4778
+        },
+        {
+          "rank": 4,
+          "document": "mes_operation_sop.md",
+          "section": "工單狀態流程",
+          "page": null,
+          "score": 0.4674
+        },
+        {
+          "rank": 5,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "異常保養",
+          "page": 3,
+          "score": 0.4415
+        }
+      ],
+      "doc_hit_at_1": true,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": true,
+      "page_hit_at_1": null,
+      "expected_rank": 1,
+      "confusable_rank": null,
+      "reciprocal_rank": 1.0,
+      "retrieval_time_ms": 15
+    },
+    {
+      "id": "C10",
+      "question": "E102 和其他設備警報的處理方式有何不同？",
+      "query_type": "confusable",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E102 感測器通訊異常",
+      "expected_page": null,
+      "confusable_document": "confusable_alarm_d900.md",
+      "top1_score": 0.7251,
+      "top1_document": "confusable_alarm_d900.md",
+      "top1_section": "與 E102 的差異",
+      "top1_page": null,
+      "top3_documents": [
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md"
+      ],
+      "ranked_documents": [
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "confusable_alarm_d900.md",
+          "section": "與 E102 的差異",
+          "page": null,
+          "score": 0.7251
+        },
+        {
+          "rank": 2,
+          "document": "equipment_alarm_manual.md",
+          "section": "E102 感測器通訊異常",
+          "page": null,
+          "score": 0.6299
+        },
+        {
+          "rank": 3,
+          "document": "confusable_alarm_d900.md",
+          "section": "安全門警報處理手冊（D900）",
+          "page": null,
+          "score": 0.6237
+        },
+        {
+          "rank": 4,
+          "document": "equipment_alarm_manual.md",
+          "section": "警報代碼對照表",
+          "page": null,
+          "score": 0.6166
+        },
+        {
+          "rank": 5,
+          "document": "equipment_alarm_manual.md",
+          "section": "E203 溫度過高警報",
+          "page": null,
+          "score": 0.6087
+        }
+      ],
+      "doc_hit_at_1": false,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": false,
+      "page_hit_at_1": null,
+      "expected_rank": 2,
+      "confusable_rank": 1,
+      "reciprocal_rank": 0.5,
+      "retrieval_time_ms": 28
+    },
+    {
+      "id": "C11",
+      "question": "通訊模組指示燈閃紅燈時屬於哪一種警報，應如何處理？",
+      "query_type": "confusable",
+      "should_answer": true,
+      "expected_document": "equipment_alarm_manual.md",
+      "expected_section": "E102 感測器通訊異常",
+      "expected_page": null,
+      "confusable_document": "confusable_alarm_d900.md",
+      "top1_score": 0.771,
+      "top1_document": "equipment_maintenance_manual.pdf",
+      "top1_section": "通訊模組檢查",
+      "top1_page": 3,
+      "top3_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md"
+      ],
+      "ranked_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_alarm_manual.md",
+        "equipment_alarm_manual.md",
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "通訊模組檢查",
+          "page": 3,
+          "score": 0.771
+        },
+        {
+          "rank": 2,
+          "document": "equipment_alarm_manual.md",
+          "section": "E102 感測器通訊異常",
+          "page": null,
+          "score": 0.7019
+        },
+        {
+          "rank": 3,
+          "document": "equipment_alarm_manual.md",
+          "section": "警報代碼對照表",
+          "page": null,
+          "score": 0.6301
+        },
+        {
+          "rank": 4,
+          "document": "confusable_alarm_d900.md",
+          "section": "與 E102 的差異",
+          "page": null,
+          "score": 0.6227
+        },
+        {
+          "rank": 5,
+          "document": "equipment_alarm_manual.md",
+          "section": "E101 電源模組異常",
+          "page": null,
+          "score": 0.6225
+        }
+      ],
+      "doc_hit_at_1": false,
+      "doc_hit_at_3": true,
+      "doc_hit_at_5": true,
+      "section_hit_at_1": false,
+      "page_hit_at_1": null,
+      "expected_rank": 2,
+      "confusable_rank": 4,
+      "reciprocal_rank": 0.5,
+      "retrieval_time_ms": 17
+    },
+    {
+      "id": "C12",
+      "question": "CX-500 的市場售價是多少？",
+      "query_type": "unanswerable",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "confusable_document": null,
+      "top1_score": 0.4986,
+      "top1_document": "equipment_maintenance_manual.pdf",
+      "top1_section": "設備基本資訊",
+      "top1_page": 1,
+      "top3_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "manufacturing_data_dictionary.txt"
+      ],
+      "ranked_documents": [
+        "equipment_maintenance_manual.pdf",
+        "equipment_maintenance_manual.pdf",
+        "manufacturing_data_dictionary.txt",
+        "confusable_alarm_d900.md",
+        "equipment_alarm_manual.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "設備基本資訊",
+          "page": 1,
+          "score": 0.4986
+        },
+        {
+          "rank": 2,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "定期保養週期",
+          "page": 2,
+          "score": 0.4301
+        },
+        {
+          "rank": 3,
+          "document": "manufacturing_data_dictionary.txt",
+          "section": null,
+          "page": null,
+          "score": 0.3626
+        },
+        {
+          "rank": 4,
+          "document": "confusable_alarm_d900.md",
+          "section": "與 E102 的差異",
+          "page": null,
+          "score": 0.3614
+        },
+        {
+          "rank": 5,
+          "document": "equipment_alarm_manual.md",
+          "section": "E203 溫度過高警報",
+          "page": null,
+          "score": 0.3593
+        }
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "doc_hit_at_5": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "expected_rank": null,
+      "confusable_rank": null,
+      "reciprocal_rank": 0.0,
+      "retrieval_time_ms": 29
+    },
+    {
+      "id": "C13",
+      "question": "台灣的首都是哪一個城市？",
+      "query_type": "unanswerable",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "confusable_document": null,
+      "top1_score": 0.3054,
+      "top1_document": "confusable_alarm_d900.md",
+      "top1_section": "警報代碼對照表",
+      "top1_page": null,
+      "top3_documents": [
+        "confusable_alarm_d900.md",
+        "api_integration_spec.md",
+        "manufacturing_data_dictionary.txt"
+      ],
+      "ranked_documents": [
+        "confusable_alarm_d900.md",
+        "api_integration_spec.md",
+        "manufacturing_data_dictionary.txt",
+        "mes_operation_sop.md",
+        "mes_operation_sop.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "confusable_alarm_d900.md",
+          "section": "警報代碼對照表",
+          "page": null,
+          "score": 0.3054
+        },
+        {
+          "rank": 2,
+          "document": "api_integration_spec.md",
+          "section": "上報工單進度請求欄位",
+          "page": null,
+          "score": 0.2898
+        },
+        {
+          "rank": 3,
+          "document": "manufacturing_data_dictionary.txt",
+          "section": null,
+          "page": null,
+          "score": 0.2883
+        },
+        {
+          "rank": 4,
+          "document": "mes_operation_sop.md",
+          "section": "狀態轉換條件",
+          "page": null,
+          "score": 0.2766
+        },
+        {
+          "rank": 5,
+          "document": "mes_operation_sop.md",
+          "section": "工單啟動",
+          "page": null,
+          "score": 0.2697
+        }
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "doc_hit_at_5": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "expected_rank": null,
+      "confusable_rank": null,
+      "reciprocal_rank": 0.0,
+      "retrieval_time_ms": 31
+    },
+    {
+      "id": "C14",
+      "question": "產線作業員的月薪是多少？",
+      "query_type": "unanswerable",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "confusable_document": null,
+      "top1_score": 0.4523,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "上報工單進度請求欄位",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "manufacturing_data_dictionary.txt",
+        "mes_operation_sop.md"
+      ],
+      "ranked_documents": [
+        "api_integration_spec.md",
+        "manufacturing_data_dictionary.txt",
+        "mes_operation_sop.md",
+        "equipment_maintenance_manual.pdf",
+        "mes_operation_sop.md"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "api_integration_spec.md",
+          "section": "上報工單進度請求欄位",
+          "page": null,
+          "score": 0.4523
+        },
+        {
+          "rank": 2,
+          "document": "manufacturing_data_dictionary.txt",
+          "section": null,
+          "page": null,
+          "score": 0.4503
+        },
+        {
+          "rank": 3,
+          "document": "mes_operation_sop.md",
+          "section": "工單啟動",
+          "page": null,
+          "score": 0.4444
+        },
+        {
+          "rank": 4,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "異常保養",
+          "page": 3,
+          "score": 0.4173
+        },
+        {
+          "rank": 5,
+          "document": "mes_operation_sop.md",
+          "section": "工單狀態流程",
+          "page": null,
+          "score": 0.4171
+        }
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "doc_hit_at_5": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "expected_rank": null,
+      "confusable_rank": null,
+      "reciprocal_rank": 0.0,
+      "retrieval_time_ms": 34
+    },
+    {
+      "id": "C15",
+      "question": "公司股票今天的收盤價是多少？",
+      "query_type": "unanswerable",
+      "should_answer": false,
+      "expected_document": null,
+      "expected_section": null,
+      "expected_page": null,
+      "confusable_document": null,
+      "top1_score": 0.3595,
+      "top1_document": "api_integration_spec.md",
+      "top1_section": "上報工單進度請求欄位",
+      "top1_page": null,
+      "top3_documents": [
+        "api_integration_spec.md",
+        "manufacturing_data_dictionary.txt",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "ranked_documents": [
+        "api_integration_spec.md",
+        "manufacturing_data_dictionary.txt",
+        "equipment_maintenance_manual.pdf",
+        "mes_operation_sop.md",
+        "equipment_maintenance_manual.pdf"
+      ],
+      "top5": [
+        {
+          "rank": 1,
+          "document": "api_integration_spec.md",
+          "section": "上報工單進度請求欄位",
+          "page": null,
+          "score": 0.3595
+        },
+        {
+          "rank": 2,
+          "document": "manufacturing_data_dictionary.txt",
+          "section": null,
+          "page": null,
+          "score": 0.3373
+        },
+        {
+          "rank": 3,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "定期保養週期",
+          "page": 2,
+          "score": 0.331
+        },
+        {
+          "rank": 4,
+          "document": "mes_operation_sop.md",
+          "section": "工單啟動",
+          "page": null,
+          "score": 0.3302
+        },
+        {
+          "rank": 5,
+          "document": "equipment_maintenance_manual.pdf",
+          "section": "通訊模組檢查",
+          "page": 3,
+          "score": 0.3299
+        }
+      ],
+      "doc_hit_at_1": null,
+      "doc_hit_at_3": null,
+      "doc_hit_at_5": null,
+      "section_hit_at_1": null,
+      "page_hit_at_1": null,
+      "expected_rank": null,
+      "confusable_rank": null,
+      "reciprocal_rank": 0.0,
+      "retrieval_time_ms": 28
+    }
+  ],
+  "notes": [
+    "Case 標註為 Slice 0 Baseline 格式（expected_document / expected_section / expected_page / should_answer）；Slice 1 才遷移至 Canonical Evidence Span。",
+    "Evidence Coverage、Graded NDCG、Evidence-level Precision@5、Canonical Evidence overlap 於 Slice 0 尚無可靠標註，未計算（留給 Slice 1／2）。",
+    "分數與排名為本次真實 BGE 執行結果，僅供 Baseline 記錄，不作為固定期望值斷言。"
+  ],
+  "generated_at": "2026-07-19T07:59:09.361621+00:00",
+  "hard_limit_suggestions": {
+    "exact_code_accuracy_floor": {
+      "suggested_value": 0.75,
+      "formula": "baseline exact_code Top-1 accuracy（no-regression floor：候選不得低於目前值）",
+      "baseline_basis": "3/4 exact_code 案例 Top-1 命中 = 0.75",
+      "confidence": "low (n=4 < 15)",
+      "notes": "樣本少，建議 reviewer 保守採用；放寬一個 case 約等於 1/n 的幅度。"
+    },
+    "unanswerable_false_positive_ceiling": {
+      "suggested_value": 0.25,
+      "formula": "baseline unanswerable FP rate @ threshold=0.55；baseline 為 0 時採單一 case 粒度 1/n 作為可觀測上限",
+      "baseline_basis": "0/4 無關題 top1_score ≥ 0.55（rate=0.0；粒度 1/n=0.25）",
+      "confidence": "low (n=4 < 15)",
+      "notes": "此值與 report_threshold 綁定；更換 threshold 需重新推導。"
+    },
+    "p95_latency_ceiling_ms": {
+      "suggested_value": 86,
+      "formula": "ceil(max(baseline_p95 × 1.5, baseline_p95 + 50ms))",
+      "baseline_basis": "baseline P95 = 35.8 ms（單機、單次量測）",
+      "confidence": "low (single-run, hardware-dependent)",
+      "notes": "延遲高度依賴硬體與 Qdrant 部署，跨環境不可直接套用。"
+    },
+    "semantic_recall_at_5_epsilon": {
+      "suggested_value": 0.2,
+      "formula": "ε = 1 / semantic_recall@5_considered（一個 case 翻轉的最小可觀測退化）",
+      "baseline_basis": "semantic Recall@5 = 1.0（n=5）；候選 Recall@5 應 ≥ baseline − ε",
+      "confidence": "low (n=5 < 15)",
+      "notes": "樣本少，ε 粒度粗；Slice 1 擴充 semantic 案例後應收斂。"
+    }
+  }
+}
