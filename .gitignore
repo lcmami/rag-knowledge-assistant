@@ -17,6 +17,10 @@ storage/uploads/
 *.sqlite
 *.sqlite3
 
+# v1.1 Optimizer 產物（Run Report / Optimizer DB / 暫存）不得入庫
+evaluation/runs/
+*.optimizer.db
+
 # 向量資料庫本地儲存（若以本地目錄掛載時）
 qdrant_storage/
 

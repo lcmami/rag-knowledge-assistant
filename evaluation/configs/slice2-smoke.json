@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "run_name": "slice2-smoke",
+  "random_seed": 42,
+  "dataset_path": "evaluation/datasets/v1.1/cases.json",
+  "corpus_paths": [
+    "sample_docs",
+    "evaluation/fixtures"
+  ],
+  "fail_fast": false,
+  "retry_failed": false,
+  "retry_interrupted": true,
+  "keep_trial_collections": false,
+  "trials": [
+    {
+      "trial_name": "current-dense-baseline",
+      "chunk_config": {
+        "strategy": "current"
+      },
+      "retrieval_config": {
+        "top_k": 5,
+        "score_threshold": 0.55,
+        "candidate_multiplier": 3,
+        "candidate_cap": 50
+      }
+    }
+  ]
+}

@@ -153,7 +153,8 @@ def test_does_not_touch_production_metadata_db(tmp_path):
 def test_migration_idempotent(tmp_path):
     db = str(tmp_path / "optimizer.db")
     repo = OptimizerRepository(db)
-    assert repo.applied_migrations() == ["0001_initial"]
+    # Slice 2 追加 0002_runs_trials；至少含 Slice 1 的 0001_initial 且為版本排序。
+    assert repo.applied_migrations() == ["0001_initial", "0002_runs_trials"]
     # 再建立一次 repo（等於再跑一次 migration）→ 不重複套用
     conn = sqlite3.connect(db, isolation_level=None)
     newly = run_migrations(conn)

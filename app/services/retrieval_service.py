@@ -10,7 +10,7 @@ User Question → 加 Query Instruction → Query Embedding → Qdrant 候選檢
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_store import VectorStore
@@ -26,6 +26,13 @@ class RetrievedChunk:
     chunk_index: int
     score: float
     text: str
+    # v1.1（附加、非破壞）：供離線 Optimizer 評估以 EvidenceMatcher 判定 relevance。
+    # 正式 /api/query、/api/retrieve response 不含以下欄位（RetrieveResultItem.from_chunk
+    # 只映射既有欄位），故 API 契約不變；舊 Qdrant point 缺欄位時以預設值安全退化。
+    file_hash: str | None = None
+    provenance_spans: list[dict] = field(default_factory=list)
+    identifiers: list[str] = field(default_factory=list)
+    canonical_text_version: str | None = None
 
 
 @dataclass
@@ -80,6 +87,11 @@ class RetrievalService:
                     chunk_index=payload.get("chunk_index"),
                     score=hit["score"],
                     text=payload.get("text"),
+                    # v1.1 附加 provenance（舊 point 缺欄位以預設值退化，不影響既有欄位）。
+                    file_hash=payload.get("file_hash"),
+                    provenance_spans=payload.get("provenance_spans") or [],
+                    identifiers=payload.get("identifiers") or [],
+                    canonical_text_version=payload.get("canonical_text_version"),
                 )
             )
 

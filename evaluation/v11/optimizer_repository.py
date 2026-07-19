@@ -28,6 +28,13 @@ from evaluation.v11.case_schema import (
     EvaluationDatasetV11,
     parse_dataset,
 )
+from evaluation.v11.run_models import (
+    CleanupStatus,
+    EvaluationRun,
+    RetrievalTrial,
+    TrialCaseResult,
+    TrialMetric,
+)
 
 
 class MigrationError(Exception):
@@ -62,9 +69,96 @@ _MIGRATION_0001 = [
     "CREATE INDEX IF NOT EXISTS idx_eval_cases_group ON evaluation_cases(group_id)",
 ]
 
+# --------------------------------------------------------------------------
+# Slice 2（§七）：Run / Trial / Metric / Case Result 執行模型表。
+# 均在**獨立 Optimizer DB**，永不加入正式 metadata.db。
+# --------------------------------------------------------------------------
+_MIGRATION_0002 = [
+    """
+    CREATE TABLE IF NOT EXISTS evaluation_runs (
+        run_id                            TEXT PRIMARY KEY,
+        status                            TEXT NOT NULL,
+        run_name                          TEXT NOT NULL,
+        dataset_version                   TEXT,
+        dataset_hash                      TEXT,
+        corpus_hash                       TEXT,
+        code_commit                       TEXT,
+        working_tree_dirty                INTEGER,
+        canonical_text_version            TEXT,
+        loader_version                    TEXT,
+        identifier_normalization_version  TEXT,
+        random_seed                       INTEGER NOT NULL,
+        config_json                       TEXT,
+        created_at                        TEXT,
+        started_at                        TEXT,
+        completed_at                      TEXT,
+        error                             TEXT,
+        report_json_path                  TEXT,
+        report_markdown_path              TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS retrieval_trials (
+        trial_id             TEXT PRIMARY KEY,
+        run_id               TEXT NOT NULL,
+        ordinal              INTEGER NOT NULL,
+        trial_name           TEXT NOT NULL,
+        status               TEXT NOT NULL,
+        config_json          TEXT NOT NULL,
+        config_hash          TEXT NOT NULL,
+        collection_name      TEXT,
+        started_at           TEXT,
+        completed_at         TEXT,
+        index_build_time_ms  INTEGER,
+        retrieval_time_ms    INTEGER,
+        point_count          INTEGER,
+        cleanup_status       TEXT NOT NULL,
+        error                TEXT,
+        attempt_count        INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(run_id, ordinal),
+        UNIQUE(run_id, config_hash),
+        FOREIGN KEY(run_id) REFERENCES evaluation_runs(run_id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_trials_run ON retrieval_trials(run_id)",
+    """
+    CREATE TABLE IF NOT EXISTS trial_metrics (
+        trial_id               TEXT NOT NULL,
+        metric_name            TEXT NOT NULL,
+        scope                  TEXT NOT NULL,
+        query_type             TEXT NOT NULL DEFAULT '',
+        value                  REAL,
+        numerator              REAL,
+        denominator            REAL,
+        sample_count           INTEGER,
+        computable             INTEGER NOT NULL,
+        not_computable_reason  TEXT,
+        PRIMARY KEY(trial_id, scope, query_type, metric_name),
+        FOREIGN KEY(trial_id) REFERENCES retrieval_trials(trial_id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS trial_case_results (
+        trial_id             TEXT NOT NULL,
+        case_id              TEXT NOT NULL,
+        case_status          TEXT NOT NULL,
+        query_type           TEXT,
+        answerable           INTEGER NOT NULL,
+        latency_ms           INTEGER,
+        first_relevant_rank  INTEGER,
+        top_results_json     TEXT NOT NULL,
+        evidence_match_json  TEXT NOT NULL,
+        error                TEXT,
+        PRIMARY KEY(trial_id, case_id),
+        FOREIGN KEY(trial_id) REFERENCES retrieval_trials(trial_id) ON DELETE CASCADE
+    )
+    """,
+]
+
 # (version, [statements])
 MIGRATIONS: list[tuple[str, list[str]]] = [
     ("0001_initial", _MIGRATION_0001),
+    ("0002_runs_trials", _MIGRATION_0002),
 ]
 
 _SCHEMA_MIGRATIONS_DDL = """
@@ -128,6 +222,8 @@ class OptimizerRepository:
         # isolation_level=None：自行以 BEGIN/COMMIT/ROLLBACK 控制交易，確保 DDL 也能回滾。
         conn = sqlite3.connect(self.db_path, isolation_level=None)
         conn.row_factory = sqlite3.Row
+        # §七 4：開啟 Foreign Key（SQLite 預設關閉，需每連線設定）。
+        conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     def _migrate(self) -> None:
@@ -252,3 +348,300 @@ class OptimizerRepository:
             ]
         finally:
             conn.close()
+
+    # ----------------------------------------------------------------------
+    # Slice 2：Run CRUD
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def _bool_to_int(value: bool | None) -> int | None:
+        return None if value is None else (1 if value else 0)
+
+    @staticmethod
+    def _int_to_bool(value: int | None) -> bool | None:
+        return None if value is None else bool(value)
+
+    _RUN_COLUMNS = (
+        "run_id", "status", "run_name", "dataset_version", "dataset_hash",
+        "corpus_hash", "code_commit", "working_tree_dirty", "canonical_text_version",
+        "loader_version", "identifier_normalization_version", "random_seed",
+        "config_json", "created_at", "started_at", "completed_at", "error",
+        "report_json_path", "report_markdown_path",
+    )
+
+    def upsert_run(self, run: EvaluationRun) -> None:
+        """建立或更新一個 Run（依 run_id upsert；重複 run_id 不產生重複 Run）。"""
+        values = (
+            run.run_id, run.status, run.run_name, run.dataset_version, run.dataset_hash,
+            run.corpus_hash, run.code_commit, self._bool_to_int(run.working_tree_dirty),
+            run.canonical_text_version, run.loader_version,
+            run.identifier_normalization_version, run.random_seed, run.config_json,
+            run.created_at, run.started_at, run.completed_at, run.error,
+            run.report_json_path, run.report_markdown_path,
+        )
+        placeholders = ",".join("?" for _ in self._RUN_COLUMNS)
+        updates = ",".join(f"{c}=excluded.{c}" for c in self._RUN_COLUMNS if c != "run_id")
+        conn = self._connect()
+        try:
+            conn.execute(
+                f"INSERT INTO evaluation_runs ({','.join(self._RUN_COLUMNS)}) "
+                f"VALUES ({placeholders}) "
+                f"ON CONFLICT(run_id) DO UPDATE SET {updates}",
+                values,
+            )
+        finally:
+            conn.close()
+
+    def get_run(self, run_id: str) -> EvaluationRun | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM evaluation_runs WHERE run_id=?", (run_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        return self._row_to_run(row) if row else None
+
+    def _row_to_run(self, row: sqlite3.Row) -> EvaluationRun:
+        return EvaluationRun(
+            run_id=row["run_id"],
+            status=row["status"],
+            run_name=row["run_name"],
+            dataset_version=row["dataset_version"],
+            dataset_hash=row["dataset_hash"],
+            corpus_hash=row["corpus_hash"],
+            code_commit=row["code_commit"],
+            working_tree_dirty=self._int_to_bool(row["working_tree_dirty"]),
+            canonical_text_version=row["canonical_text_version"],
+            loader_version=row["loader_version"],
+            identifier_normalization_version=row["identifier_normalization_version"],
+            random_seed=row["random_seed"],
+            config_json=row["config_json"],
+            created_at=row["created_at"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            error=row["error"],
+            report_json_path=row["report_json_path"],
+            report_markdown_path=row["report_markdown_path"],
+        )
+
+    def delete_run(self, run_id: str) -> None:
+        """刪除 Run；FK ON DELETE CASCADE 會連帶刪 trials / metrics / case results。"""
+        conn = self._connect()
+        try:
+            conn.execute("DELETE FROM evaluation_runs WHERE run_id=?", (run_id,))
+        finally:
+            conn.close()
+
+    # ----------------------------------------------------------------------
+    # Trial CRUD
+    # ----------------------------------------------------------------------
+    _TRIAL_COLUMNS = (
+        "trial_id", "run_id", "ordinal", "trial_name", "status", "config_json",
+        "config_hash", "collection_name", "started_at", "completed_at",
+        "index_build_time_ms", "retrieval_time_ms", "point_count", "cleanup_status",
+        "error", "attempt_count",
+    )
+
+    def upsert_trial(self, trial: RetrievalTrial) -> None:
+        """建立或更新一個 Trial（依 trial_id upsert）。"""
+        values = (
+            trial.trial_id, trial.run_id, trial.ordinal, trial.trial_name, trial.status,
+            trial.config_json, trial.config_hash, trial.collection_name,
+            trial.started_at, trial.completed_at, trial.index_build_time_ms,
+            trial.retrieval_time_ms, trial.point_count, trial.cleanup_status,
+            trial.error, trial.attempt_count,
+        )
+        placeholders = ",".join("?" for _ in self._TRIAL_COLUMNS)
+        updates = ",".join(f"{c}=excluded.{c}" for c in self._TRIAL_COLUMNS if c != "trial_id")
+        conn = self._connect()
+        try:
+            conn.execute(
+                f"INSERT INTO retrieval_trials ({','.join(self._TRIAL_COLUMNS)}) "
+                f"VALUES ({placeholders}) "
+                f"ON CONFLICT(trial_id) DO UPDATE SET {updates}",
+                values,
+            )
+        finally:
+            conn.close()
+
+    def _row_to_trial(self, row: sqlite3.Row) -> RetrievalTrial:
+        return RetrievalTrial(
+            trial_id=row["trial_id"],
+            run_id=row["run_id"],
+            ordinal=row["ordinal"],
+            trial_name=row["trial_name"],
+            status=row["status"],
+            config_json=row["config_json"],
+            config_hash=row["config_hash"],
+            collection_name=row["collection_name"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            index_build_time_ms=row["index_build_time_ms"],
+            retrieval_time_ms=row["retrieval_time_ms"],
+            point_count=row["point_count"],
+            cleanup_status=row["cleanup_status"],
+            error=row["error"],
+            attempt_count=row["attempt_count"],
+        )
+
+    def get_trial(self, trial_id: str) -> RetrievalTrial | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM retrieval_trials WHERE trial_id=?", (trial_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        return self._row_to_trial(row) if row else None
+
+    def get_trial_by_ordinal(self, run_id: str, ordinal: int) -> RetrievalTrial | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM retrieval_trials WHERE run_id=? AND ordinal=?",
+                (run_id, ordinal),
+            ).fetchone()
+        finally:
+            conn.close()
+        return self._row_to_trial(row) if row else None
+
+    def get_trial_by_config_hash(self, run_id: str, config_hash: str) -> RetrievalTrial | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM retrieval_trials WHERE run_id=? AND config_hash=?",
+                (run_id, config_hash),
+            ).fetchone()
+        finally:
+            conn.close()
+        return self._row_to_trial(row) if row else None
+
+    def list_trials(self, run_id: str) -> list[RetrievalTrial]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM retrieval_trials WHERE run_id=? ORDER BY ordinal",
+                (run_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [self._row_to_trial(r) for r in rows]
+
+    def list_running_trials(self) -> list[RetrievalTrial]:
+        """所有標記為 running 的 Trial（供 resume 前偵測遺留中斷）。"""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM retrieval_trials WHERE status='running' ORDER BY run_id, ordinal"
+            ).fetchall()
+        finally:
+            conn.close()
+        return [self._row_to_trial(r) for r in rows]
+
+    # ----------------------------------------------------------------------
+    # Trial Metrics / Case Results（delete-then-insert，idempotent per trial）
+    # ----------------------------------------------------------------------
+    def save_trial_metrics(self, trial_id: str, metrics: list[TrialMetric]) -> None:
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN")
+            conn.execute("DELETE FROM trial_metrics WHERE trial_id=?", (trial_id,))
+            for m in metrics:
+                conn.execute(
+                    """
+                    INSERT INTO trial_metrics
+                        (trial_id, metric_name, scope, query_type, value, numerator,
+                         denominator, sample_count, computable, not_computable_reason)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        trial_id, m.metric_name, m.scope, m.query_type or "",
+                        m.value, m.numerator, m.denominator, m.sample_count,
+                        1 if m.computable else 0, m.not_computable_reason,
+                    ),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+
+    def get_trial_metrics(self, trial_id: str) -> list[TrialMetric]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM trial_metrics WHERE trial_id=? ORDER BY scope, query_type, metric_name",
+                (trial_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [
+            TrialMetric(
+                trial_id=r["trial_id"],
+                metric_name=r["metric_name"],
+                scope=r["scope"],
+                query_type=(r["query_type"] or None),
+                value=r["value"],
+                numerator=r["numerator"],
+                denominator=r["denominator"],
+                sample_count=r["sample_count"],
+                computable=bool(r["computable"]),
+                not_computable_reason=r["not_computable_reason"],
+            )
+            for r in rows
+        ]
+
+    def save_trial_case_results(
+        self, trial_id: str, results: list[TrialCaseResult]
+    ) -> None:
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN")
+            conn.execute("DELETE FROM trial_case_results WHERE trial_id=?", (trial_id,))
+            for c in results:
+                conn.execute(
+                    """
+                    INSERT INTO trial_case_results
+                        (trial_id, case_id, case_status, query_type, answerable,
+                         latency_ms, first_relevant_rank, top_results_json,
+                         evidence_match_json, error)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        trial_id, c.case_id, c.case_status, c.query_type,
+                        1 if c.answerable else 0, c.latency_ms, c.first_relevant_rank,
+                        c.top_results_json, c.evidence_match_json, c.error,
+                    ),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+
+    def get_trial_case_results(self, trial_id: str) -> list[TrialCaseResult]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM trial_case_results WHERE trial_id=? ORDER BY case_id",
+                (trial_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [
+            TrialCaseResult(
+                trial_id=r["trial_id"],
+                case_id=r["case_id"],
+                case_status=r["case_status"],
+                query_type=r["query_type"],
+                answerable=bool(r["answerable"]),
+                latency_ms=r["latency_ms"],
+                first_relevant_rank=r["first_relevant_rank"],
+                top_results_json=r["top_results_json"],
+                evidence_match_json=r["evidence_match_json"],
+                error=r["error"],
+            )
+            for r in rows
+        ]
