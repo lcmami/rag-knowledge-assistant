@@ -1,0 +1,142 @@
+[
+  {
+    "id": "C01",
+    "query_type": "exact_code",
+    "question": "設備出現 E102 警報時應如何處理？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E102 感測器通訊異常",
+    "expected_page": null,
+    "confusable_document": "confusable_alarm_d900.md",
+    "should_answer": true
+  },
+  {
+    "id": "C02",
+    "query_type": "exact_code",
+    "question": "E102 警報代表什麼？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E102 感測器通訊異常",
+    "expected_page": null,
+    "confusable_document": "confusable_alarm_d900.md",
+    "should_answer": true
+  },
+  {
+    "id": "C03",
+    "query_type": "exact_code",
+    "question": "設備顯示 E101 電源模組異常時，操作員應先確認什麼？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E101 電源模組異常",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "C04",
+    "query_type": "exact_code",
+    "question": "E203 溫度過高警報的安全閾值是攝氏幾度？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E203 溫度過高警報",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "C05",
+    "query_type": "semantic",
+    "question": "感測器無法與控制器正常通訊時應如何排除？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E102 感測器通訊異常",
+    "expected_page": null,
+    "confusable_document": "confusable_alarm_d900.md",
+    "should_answer": true
+  },
+  {
+    "id": "C06",
+    "query_type": "semantic",
+    "question": "CX-500 設備的基本保養每幾小時執行一次？",
+    "expected_document": "equipment_maintenance_manual.pdf",
+    "expected_section": "定期保養週期",
+    "expected_page": 2,
+    "should_answer": true
+  },
+  {
+    "id": "C07",
+    "query_type": "semantic",
+    "question": "空氣過濾網每幾小時需要清潔一次？",
+    "expected_document": "equipment_maintenance_manual.pdf",
+    "expected_section": "定期保養週期",
+    "expected_page": 2,
+    "should_answer": true
+  },
+  {
+    "id": "C08",
+    "query_type": "semantic",
+    "question": "MES 工單如何從 WAITING 切換為 RUNNING？",
+    "expected_document": "mes_operation_sop.md",
+    "expected_section": "工單狀態流程",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "C09",
+    "query_type": "semantic",
+    "question": "API Token 的有效時間是多久？",
+    "expected_document": "api_integration_spec.md",
+    "expected_section": "認證與 Token",
+    "expected_page": null,
+    "should_answer": true
+  },
+  {
+    "id": "C10",
+    "query_type": "confusable",
+    "question": "E102 和其他設備警報的處理方式有何不同？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E102 感測器通訊異常",
+    "expected_page": null,
+    "confusable_document": "confusable_alarm_d900.md",
+    "should_answer": true
+  },
+  {
+    "id": "C11",
+    "query_type": "confusable",
+    "question": "通訊模組指示燈閃紅燈時屬於哪一種警報，應如何處理？",
+    "expected_document": "equipment_alarm_manual.md",
+    "expected_section": "E102 感測器通訊異常",
+    "expected_page": null,
+    "confusable_document": "confusable_alarm_d900.md",
+    "should_answer": true
+  },
+  {
+    "id": "C12",
+    "query_type": "unanswerable",
+    "question": "CX-500 的市場售價是多少？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "C13",
+    "query_type": "unanswerable",
+    "question": "台灣的首都是哪一個城市？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "C14",
+    "query_type": "unanswerable",
+    "question": "產線作業員的月薪是多少？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  },
+  {
+    "id": "C15",
+    "query_type": "unanswerable",
+    "question": "公司股票今天的收盤價是多少？",
+    "expected_document": null,
+    "expected_section": null,
+    "expected_page": null,
+    "should_answer": false
+  }
+]
