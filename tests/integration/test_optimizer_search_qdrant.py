@@ -224,3 +224,146 @@ def test_no_llm_client_is_constructed(search_result, monkeypatch):
     blob = open(result.report_json_path, encoding="utf-8").read().lower()
     for banned in ("groq", "chat.completions", "llm_model"):
         assert banned not in blob
+
+
+# ==========================================================================
+# Slice 5A —— coverage-revised dataset 走完 Recommendation → Lock → Test
+# ==========================================================================
+CONFIG_V2_PATH = os.path.join(
+    ROOT, "evaluation", "configs", "slice5-optimizer-smoke-v2.json"
+)
+
+
+def _small_v2_config():
+    """縮小版 v2：1 chunk strategy × (dense + ida floor 0.5) → 快速走完完整流程。"""
+    from evaluation.v11.search.search_config import SearchConfig
+
+    with open(CONFIG_V2_PATH, encoding="utf-8") as f:
+        raw = json.load(f)
+    raw["search_name"] = "slice5a-integration"
+    raw["search_space"] = {
+        "retrieval": {
+            "strategy": ["dense", "identifier_aware"],
+            "identifier_vector_floor": [0.5],
+        }
+    }
+    raw["max_candidates"] = 4
+    raw["validation_top_n"] = 4
+    return SearchConfig.from_raw(raw)
+
+
+@pytest.fixture
+def v2_result(qdrant_url):
+    from evaluation.v11.real_services import RealTrialServiceProvider
+    from evaluation.v11.search import search_runner
+    from evaluation.v11.search.search_repository import SearchRepository
+
+    before_names, before_points = _prod_snapshot(qdrant_url)
+    outdir = tempfile.mkdtemp(prefix="slice5a_integration_")
+    workdir = tempfile.mkdtemp(prefix="slice5a_work_")
+    repo = SearchRepository(os.path.join(outdir, "s.optimizer.db"))
+    provider = RealTrialServiceProvider.create(qdrant_url, workdir)
+    try:
+        result = search_runner.execute_search(
+            _small_v2_config(), repo, provider, output_dir=outdir
+        )
+        yield result, repo, qdrant_url, before_names, before_points
+    finally:
+        provider.close()
+        shutil.rmtree(workdir, ignore_errors=True)
+        shutil.rmtree(outdir, ignore_errors=True)
+
+
+def test_v2_validation_coverage_is_sufficient(v2_result):
+    result, _, _, _, _ = v2_result
+    assert result.coverage.sufficient is True
+    assert result.coverage.status == "ok"
+    assert result.coverage.blocking == []
+
+
+def test_v2_all_four_constraints_actually_computed_on_validation(v2_result):
+    """§八.1：validation 的四項 constraint 全部可計算（不再是 not-computable）。"""
+    result, _, _, _, _ = v2_result
+    assert result.constraint_evals, "應有候選進入 validation constraint 判定"
+    for chash, ce in result.constraint_evals.items():
+        assert len(ce.results) == 4
+        for r in ce.results:
+            assert r.computable is True, f"{chash} 的 {r.name} 仍不可計算：{r.reason}"
+            assert r.observed_value is not None
+            assert r.sample_count and r.sample_count > 0
+
+
+def test_v2_reaches_recommendation_and_locks(v2_result):
+    result, _, _, _, _ = v2_result
+    s = result.search
+    assert s.recommended_config_hash, "coverage 足夠時應能選出 recommendation"
+    assert s.recommendation_locked is True
+    assert s.recommendation_locked_at
+    assert result.pareto and result.pareto.frontier
+
+
+def test_v2_recommendation_comes_from_feasible_pareto_member(v2_result):
+    result, _, _, _, _ = v2_result
+    rec = result.search.recommended_config_hash
+    winner = next(c for c in result.candidates if c.config_hash == rec)
+    assert winner.feasible is True
+    assert winner.pareto_member is True
+
+
+def test_v2_test_stage_runs_exactly_baseline_and_recommendation(v2_result):
+    """§十二.5：lock 後 test 只跑兩個 config。"""
+    result, repo, _, _, _ = v2_result
+    s = result.search
+    assert s.test_evaluated is True
+    trials = repo.list_trials(s.test_run_id)
+    hashes = {t.config_hash for t in trials}
+    expected = {s.baseline_config_hash, s.recommended_config_hash}
+    assert hashes == expected
+    assert len(trials) == len(expected), "test 不得執行其他 candidate"
+
+
+def test_v2_test_does_not_change_recommendation(v2_result):
+    """§十二.5：即使 test 標示 regression，鎖定的 recommendation 不變。"""
+    from evaluation.v11.search.search_models import RecommendationLockError
+
+    result, repo, _, _, _ = v2_result
+    locked = result.search.recommended_config_hash
+    stored = repo.get_search(result.search.search_id)
+    assert stored.recommended_config_hash == locked
+    with pytest.raises(RecommendationLockError):
+        repo.lock_recommendation(result.search.search_id, "another-hash", "now")
+    assert repo.get_search(result.search.search_id).recommended_config_hash == locked
+
+
+def test_v2_report_exposes_test_only_after_lock(v2_result):
+    result, _, _, _, _ = v2_result
+    with open(result.report_json_path, encoding="utf-8") as f:
+        report = json.load(f)
+    assert report["recommendation"]["recommendation_locked"] is True
+    assert report["test"]["available"] is True
+    assert report["test"]["baseline_metrics"]
+    assert report["test"]["recommendation_metrics"]
+    assert report["test"]["baseline_vs_recommendation_delta"]
+
+
+def test_v2_c01_rank_is_honestly_recorded(v2_result):
+    """§十九：C01 只能誠實記錄，不得宣稱已解決。"""
+    result, _, _, _, _ = v2_result
+    with open(result.report_json_path, encoding="utf-8") as f:
+        report = json.load(f)
+    c01 = report["c01_same_chunk_multi_identifier"]
+    assert c01["case_id"] == "eval-e102-001"
+    assert c01["observable"] is True
+    ranks = c01["first_relevant_rank"]
+    assert set(ranks) == {"baseline", "recommended"}
+    if not c01["resolved"]:
+        assert "did not resolve" in c01["note"] or "No candidate" in c01["note"]
+
+
+def test_v2_collections_cleaned_and_production_untouched(v2_result):
+    result, _, url, before_names, before_points = v2_result
+    after_names, after_points = _prod_snapshot(url)
+    assert [n for n in after_names if n.startswith("optimizer_")] == []
+    assert result.remaining_collections == []
+    assert set(after_names) == set(before_names)
+    assert after_points == before_points
