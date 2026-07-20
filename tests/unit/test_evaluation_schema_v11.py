@@ -157,7 +157,7 @@ def test_migration_idempotent(tmp_path):
     # Slice 4 追加 0004_retrieval_meta；Slice 5 追加 0005_optimizer_search（版本排序）。
     assert repo.applied_migrations() == [
         "0001_initial", "0002_runs_trials", "0003_chunk_cache_stats", "0004_retrieval_meta",
-        "0005_optimizer_search",
+        "0005_optimizer_search", "0006_search_outcome",
     ]
     # 再建立一次 repo（等於再跑一次 migration）→ 不重複套用
     conn = sqlite3.connect(db, isolation_level=None)

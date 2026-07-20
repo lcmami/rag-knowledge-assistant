@@ -45,6 +45,7 @@ def test_migration_0002_applied(tmp_path):
         "0003_chunk_cache_stats",
         "0004_retrieval_meta",
         "0005_optimizer_search",
+        "0006_search_outcome",
     ]
 
 

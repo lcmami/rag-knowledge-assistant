@@ -339,6 +339,61 @@ def test_report_contains_required_sections(repo_tmp):
     assert os.path.exists(result.report_markdown_path)
 
 
+def test_report_contains_outcome_semantics(repo_tmp):
+    """Slice 5A §二～§六：兩種狀態與證據強度必須都進 Report。"""
+    result, _, _, _ = run_search(repo_tmp)
+    with open(result.report_json_path, encoding="utf-8") as f:
+        report = json.load(f)
+    oc = report["outcome"]
+    for key in (
+        "test_constraint_status", "failed_test_constraints",
+        "baseline_comparison_status", "metrics",
+        "recommendation_apply_eligible", "recommendation_confidence",
+        "recommendation_selection_basis", "apply_ineligible_reasons",
+        "quality_tie_candidate_count", "latency_measurement_repetitions",
+        "latency_selection_stable", "metric_sample_granularity",
+        "identifier_unanswerable_coverage",
+        # 四段說明各自獨立保存，不得互相覆蓋。
+        "test_constraint_note", "baseline_comparison_note",
+        "selection_note", "apply_eligibility_note",
+    ):
+        assert key in oc, f"outcome 缺少 {key}"
+    # recommendation 區塊也要能直接看到 apply 資格
+    assert report["recommendation"]["recommendation_apply_eligible"] is False
+
+    # §六 的 tie-break 揭露與 §三 的 apply 說明必須**都**出現在 Markdown 報告裡。
+    with open(result.report_markdown_path, encoding="utf-8") as f:
+        md = f.read()
+    assert oc["apply_eligibility_note"].split("\n")[0] in md
+    assert oc["selection_note"].split("\n")[0] in md
+
+
+def test_outcome_is_persisted_on_the_search_record(repo_tmp):
+    """§三：Slice 7 需能從 search record（而非只有報告）讀到 apply 資格。"""
+    result, repo, _, _ = run_search(repo_tmp)
+    stored = repo.get_search(result.search.search_id)
+    assert stored.outcome_json
+    oc = json.loads(stored.outcome_json)
+    assert oc["recommendation_apply_eligible"] is False
+    assert oc["recommendation_confidence"] == "low"
+
+
+def test_locked_recommendation_exists_but_is_not_apply_eligible(repo_tmp):
+    """§三：lock 與 apply 資格是兩件事。"""
+    result, repo, _, _ = run_search(repo_tmp)
+    stored = repo.get_search(result.search.search_id)
+    assert stored.recommendation_locked is True
+    assert stored.recommended_config_hash, "lock 仍應保有固定的 candidate"
+    assert json.loads(stored.outcome_json)["recommendation_apply_eligible"] is False
+
+
+def test_constraint_failed_and_regression_are_distinct_statuses():
+    """§2.3：不得只輸出 test_regression。"""
+    assert SearchStatus.TEST_CONSTRAINT_FAILED == "test_constraint_failed"
+    assert SearchStatus.TEST_REGRESSION == "test_regression"
+    assert SearchStatus.TEST_CONSTRAINT_FAILED != SearchStatus.TEST_REGRESSION
+
+
 def test_report_never_labels_recommendation_as_deployed(repo_tmp):
     result, _, _, _ = run_search(repo_tmp)
     blob = open(result.report_json_path, encoding="utf-8").read()

@@ -37,6 +37,7 @@ class SearchRepository(OptimizerRepository):
         "report_json_path", "report_markdown_path",
         "tune_run_id", "validation_run_id", "test_run_id",
         "generation_stats_json", "candidate_manifest_json", "split_manifest_json",
+        "outcome_json",
     )
 
     def upsert_search(self, search: OptimizerSearch) -> None:
@@ -55,7 +56,7 @@ class SearchRepository(OptimizerRepository):
             search.report_json_path, search.report_markdown_path,
             search.tune_run_id, search.validation_run_id, search.test_run_id,
             search.generation_stats_json, search.candidate_manifest_json,
-            search.split_manifest_json,
+            search.split_manifest_json, search.outcome_json,
         )
         placeholders = ",".join("?" for _ in self._SEARCH_COLUMNS)
         updates = ",".join(
@@ -133,6 +134,7 @@ class SearchRepository(OptimizerRepository):
             generation_stats_json=self._row_get(row, "generation_stats_json"),
             candidate_manifest_json=self._row_get(row, "candidate_manifest_json"),
             split_manifest_json=self._row_get(row, "split_manifest_json"),
+            outcome_json=self._row_get(row, "outcome_json"),
         )
 
     # ----------------------------------------------------------------------

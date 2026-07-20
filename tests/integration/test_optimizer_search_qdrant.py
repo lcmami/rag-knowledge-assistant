@@ -235,12 +235,22 @@ CONFIG_V2_PATH = os.path.join(
 
 
 def _small_v2_config():
-    """縮小版 v2：1 chunk strategy × (dense + ida floor 0.5) → 快速走完完整流程。"""
+    """縮小版 v2：1 chunk strategy × (dense + ida floor 0.5) → 快速走完完整流程。
+
+    **p95 門檻刻意放寬**：本測試驗證的是 workflow（coverage → constraints → pareto →
+    recommendation → lock → test），不是延遲。實測本機 validation p95 落在 80~223 ms
+    之間，遠高於 Slice 0 推導的 86 ms 上限（該值來自單次量測，且 Slice 0 自己就標注
+    「延遲高度依賴硬體，跨環境不可直接套用」）。若沿用 86 ms，candidate 是否可行會
+    隨機器負載而變，測試將變成硬體 flaky test。其餘三項 constraint 完全不動。
+    """
     from evaluation.v11.search.search_config import SearchConfig
 
     with open(CONFIG_V2_PATH, encoding="utf-8") as f:
         raw = json.load(f)
     raw["search_name"] = "slice5a-integration"
+    for c in raw["hard_constraints"]:
+        if c["metric"] == "p95_retrieval_latency_ms":
+            c["value"] = 100000
     raw["search_space"] = {
         "retrieval": {
             "strategy": ["dense", "identifier_aware"],
@@ -358,6 +368,59 @@ def test_v2_c01_rank_is_honestly_recorded(v2_result):
     assert set(ranks) == {"baseline", "recommended"}
     if not c01["resolved"]:
         assert "did not resolve" in c01["note"] or "No candidate" in c01["note"]
+
+
+def test_v2_outcome_separates_constraint_status_from_baseline_comparison(v2_result):
+    """Slice 5A §二：兩種狀態在真實 E2E 上必須分開且都被記錄。"""
+    result, repo, _, _, _ = v2_result
+    with open(result.report_json_path, encoding="utf-8") as f:
+        report = json.load(f)
+    oc = report["outcome"]
+    assert oc["test_constraint_status"] in ("passed", "failed")
+    assert oc["baseline_comparison_status"] in (
+        "improved", "same", "regressed", "mixed", "not_evaluated"
+    )
+    # 若絕對門檻失敗，不得因此就把相對比較記成 regressed
+    if oc["test_constraint_status"] == "failed":
+        assert oc["failed_test_constraints"]
+        assert result.search.status == "test_constraint_failed"
+    # 逐 metric 比較必須存在且有方向
+    assert oc["metrics"]
+    for m in oc["metrics"]:
+        assert m["direction"] in ("maximize", "minimize")
+        assert m["comparison"] in (
+            "improved", "same", "regressed", "not_evaluated"
+        )
+
+
+def test_v2_recommendation_is_locked_but_not_apply_eligible(v2_result):
+    """§三：recommended_config_hash 存在且鎖定，但證據不足以 Apply。"""
+    result, repo, _, _, _ = v2_result
+    stored = repo.get_search(result.search.search_id)
+    assert stored.recommendation_locked is True
+    assert stored.recommended_config_hash
+    oc = json.loads(stored.outcome_json)
+    assert oc["recommendation_apply_eligible"] is False
+    assert oc["recommendation_confidence"] == "low"
+    assert "demo_corpus_only" in oc["apply_ineligible_reasons"]
+
+
+def test_v2_report_discloses_sample_granularity_and_identifier_gap(v2_result):
+    """§四／§五：小樣本與 identifier-bearing unanswerable 缺口必須揭露。"""
+    result, _, _, _, _ = v2_result
+    with open(result.report_json_path, encoding="utf-8") as f:
+        report = json.load(f)
+    gran = report["outcome"]["metric_sample_granularity"]
+    rows = {(r["split"], r["query_type"]): r for r in gran["per_split"]}
+    assert rows[("validation", "exact_code")]["n"] == 1
+    assert rows[("validation", "unanswerable")]["n"] == 2
+    assert rows[("test", "exact_code")]["n"] == 2
+    assert any("low statistical confidence" in n for n in gran["notes"])
+
+    cov = report["outcome"]["identifier_unanswerable_coverage"]
+    assert cov["validation_has_identifier_bearing_unanswerable"] is False
+    assert "identifier_vector_floor" in cov["limitation"]
+    assert cov["required_followup"]
 
 
 def test_v2_collections_cleaned_and_production_untouched(v2_result):

@@ -260,6 +260,17 @@ _MIGRATION_0005 = [
     "CREATE INDEX IF NOT EXISTS idx_candidates_search ON optimizer_candidates(search_id)",
 ]
 
+# --------------------------------------------------------------------------
+# Slice 5A（§二 / §三）：Test 驗收結果語意與 Recommendation 證據強度。
+#
+# 單一 JSON blob 欄位即可承載全部新語意（test_constraint_status /
+# baseline_comparison_status / apply eligibility / 樣本粒度 / latency tie 分析），
+# 因此只追加一欄，不為每個欄位各開一欄。舊 row 缺此欄以 NULL 退化。
+# --------------------------------------------------------------------------
+_MIGRATION_0006 = [
+    "ALTER TABLE optimizer_searches ADD COLUMN outcome_json TEXT",
+]
+
 # (version, [statements])
 MIGRATIONS: list[tuple[str, list[str]]] = [
     ("0001_initial", _MIGRATION_0001),
@@ -267,6 +278,7 @@ MIGRATIONS: list[tuple[str, list[str]]] = [
     ("0003_chunk_cache_stats", _MIGRATION_0003),
     ("0004_retrieval_meta", _MIGRATION_0004),
     ("0005_optimizer_search", _MIGRATION_0005),
+    ("0006_search_outcome", _MIGRATION_0006),
 ]
 
 _SCHEMA_MIGRATIONS_DDL = """

@@ -51,10 +51,10 @@ def make_candidate(**kw) -> SearchCandidate:
 # --------------------------------------------------------------------------
 # Migration
 # --------------------------------------------------------------------------
-def test_migration_0005_registered_last():
+def test_migrations_registered_in_order():
     assert [v for v, _ in MIGRATIONS] == [
         "0001_initial", "0002_runs_trials", "0003_chunk_cache_stats",
-        "0004_retrieval_meta", "0005_optimizer_search",
+        "0004_retrieval_meta", "0005_optimizer_search", "0006_search_outcome",
     ]
 
 

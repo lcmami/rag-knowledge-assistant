@@ -26,7 +26,11 @@ class SearchStatus:
     NO_FEASIBLE_CANDIDATE = "no_feasible_candidate"
     #: §五：validation split 不足以計算必要的 hard constraint。
     INSUFFICIENT_VALIDATION_COVERAGE = "insufficient_validation_coverage"
-    #: §12.5：已 lock 並跑完 test，但 test 出現退化（recommendation 不變）。
+    #: Slice 5A §2.3：已 lock 並跑完 test，但 recommendation 未通過 test 的**絕對**
+    #: hard constraint（recommendation 不變）。這與「相對 baseline 退化」是不同概念 ——
+    #: 即使 baseline 同樣未達標，仍記為 constraint failed。
+    TEST_CONSTRAINT_FAILED = "test_constraint_failed"
+    #: §12.5：test 絕對門檻通過，但**相對 baseline** 全面退化（recommendation 不變）。
     TEST_REGRESSION = "test_regression"
     #: §12.5：test 階段執行失敗（recommendation 保留為原鎖定結果）。
     TEST_FAILED = "test_failed"
@@ -78,6 +82,9 @@ class OptimizerSearch:
     generation_stats_json: Optional[str] = None
     candidate_manifest_json: Optional[str] = None
     split_manifest_json: Optional[str] = None
+    #: Slice 5A（§二／§三）：test 驗收語意 + apply eligibility + 樣本粒度 + latency tie 分析。
+    #: 單一 JSON blob，避免為每個欄位各開一欄。
+    outcome_json: Optional[str] = None
 
     def assert_test_allowed(self) -> None:
         """§12.4 / §13.3：lock 之前不得建立或執行任何 test trial。"""

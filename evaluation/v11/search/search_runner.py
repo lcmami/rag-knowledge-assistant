@@ -27,6 +27,7 @@ from typing import Any, Callable, Optional, Sequence
 from evaluation.v11 import hashing, trial_runner
 from evaluation.v11.metric_config import DEFAULT_METRIC_CONFIG, MetricConfig
 from evaluation.v11.run_models import RunConfig, TrialConfig, TrialStatus
+from evaluation.v11.search import outcome as outcome_mod
 from evaluation.v11.search import pareto as pareto_mod
 from evaluation.v11.search import recommendation as rec_mod
 from evaluation.v11.search import split_dataset as split_mod
@@ -35,7 +36,7 @@ from evaluation.v11.search.constraints import (
     MetricLookup,
     evaluate_constraints,
 )
-from evaluation.v11.search.search_config import SearchConfig
+from evaluation.v11.search.search_config import MetricRef, SearchConfig
 from evaluation.v11.search.search_models import (
     CandidateStageStatus,
     OptimizerSearch,
@@ -106,6 +107,10 @@ class SearchResult:
     report_markdown_path: Optional[str] = None
     remaining_collections: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    # -- Slice 5A §二～§六：結果語意與證據強度 --
+    test_outcome: Optional[outcome_mod.TestConstraintOutcome] = None
+    baseline_comparison: Optional[outcome_mod.BaselineComparison] = None
+    outcome: dict[str, Any] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------
@@ -620,24 +625,15 @@ def execute_search(
                         else CandidateStageStatus.FAILED
                     )
 
-            # §12.5：test 只影響 final status，**不改變** recommendation。
+            # §12.5 / Slice 5A §二：test 只影響 final status，**不改變** recommendation。
             if rec_hash not in test.metrics_by_hash or baseline_hash not in test.metrics_by_hash:
                 search.status = SearchStatus.TEST_FAILED
             else:
-                regressed = _test_regressions(
-                    search_config,
-                    test.metrics_by_hash[baseline_hash],
-                    test.metrics_by_hash[rec_hash],
+                search.status = _apply_test_outcome(
+                    result, search, search_config,
+                    baseline=test.metrics_by_hash[baseline_hash],
+                    recommendation=test.metrics_by_hash[rec_hash],
                 )
-                search.status = (
-                    SearchStatus.TEST_REGRESSION if regressed else SearchStatus.COMPLETED
-                )
-                if regressed:
-                    result.notes.append(
-                        "test split 上偵測到 regression："
-                        + "；".join(regressed)
-                        + "。依 §12.5，recommendation 維持為原鎖定結果，不改選第二名。"
-                    )
         search.completed_at = now_fn()
         repo.upsert_search(search)
         repo.save_candidates(candidates)
@@ -652,6 +648,13 @@ def execute_search(
         )
     )
 
+    # -- Slice 5A：結果語意 + 證據強度，寫入 search record 供 Slice 7 判讀 --
+    result.outcome = build_outcome(result, result.search, search_config)
+    search = result.search
+    search.outcome_json = hashing.canonical_json(result.outcome)
+    repo.upsert_search(search)
+    result.search = repo.get_search(sid) or search
+
     if write_report:
         report = search_report.build_search_report(result, search_config, repo)
         json_path, md_path = search_report.write_search_report(report, search_output)
@@ -665,21 +668,151 @@ def execute_search(
     return result
 
 
-def _test_regressions(
+def _apply_test_outcome(
+    result: "SearchResult",
+    search: OptimizerSearch,
     search_config: SearchConfig,
+    *,
     baseline: MetricLookup,
-    recommended: MetricLookup,
-) -> list[str]:
-    """§12.5：以同一組 hard constraint 檢查 test split 上是否退化。
+    recommendation: MetricLookup,
+) -> str:
+    """計算 test 驗收語意並決定 final status（Slice 5A §二）。
 
-    僅供標示 final status；**不得**用來重新選擇 candidate。
+    嚴格分開兩件事：
+
+    - ``test_constraint_status``：recommendation 是否滿足 test 上的**絕對**門檻。
+    - ``baseline_comparison_status``：recommendation **相對 baseline** 的表現。
+
+    「兩者都沒通過絕對門檻」**不得**被記為「相對 baseline 退化」。
+    本函式只描述結果，**不會**改變已鎖定的 recommendation。
     """
-    ce = evaluate_constraints(search_config.hard_constraints, recommended, baseline)
-    return [
-        f"{r.name}（observed={r.observed_value!r} / required={r.required_value!r}）"
-        for r in ce.results
-        if r.status == "fail"
+    tol = search_config.recommendation_policy.float_tolerance
+
+    test_outcome = outcome_mod.evaluate_test_constraints(
+        search_config.hard_constraints, recommendation, baseline
+    )
+    refs = [o.ref for o in search_config.pareto_objectives] + [
+        c.ref for c in search_config.hard_constraints
     ]
+    comparison = outcome_mod.compare_to_baseline(
+        refs, baseline, recommendation, search_config.pareto_objectives, tolerance=tol
+    )
+    result.test_outcome = test_outcome
+    result.baseline_comparison = comparison
+
+    if test_outcome.status == outcome_mod.TEST_CONSTRAINT_FAILED:
+        result.notes.append(
+            "test constraint 驗收失敗："
+            + "、".join(test_outcome.failed_test_constraints)
+            + f"；相對 baseline 的結果為 {comparison.status}。"
+            "依 §12.5，recommendation 維持為原鎖定結果，不改選第二名。"
+        )
+        return SearchStatus.TEST_CONSTRAINT_FAILED
+
+    if comparison.status == outcome_mod.CMP_REGRESSED:
+        result.notes.append(
+            "test 絕對門檻全數通過，但相對 baseline 全面退化；"
+            "recommendation 仍維持原鎖定結果。"
+        )
+        return SearchStatus.TEST_REGRESSION
+
+    return SearchStatus.COMPLETED
+
+
+def build_outcome(
+    result: "SearchResult", search: OptimizerSearch, search_config: SearchConfig
+) -> dict[str, Any]:
+    """組出完整的結果語意 + 證據強度描述（Slice 5A §二～§六）。"""
+    tol = search_config.recommendation_policy.float_tolerance
+    test_outcome = result.test_outcome or outcome_mod.TestConstraintOutcome(
+        status=outcome_mod.TEST_CONSTRAINT_NOT_EVALUATED,
+        note="recommendation 未 lock 或 test 未執行，test constraint 未驗收。",
+    )
+    comparison = result.baseline_comparison or outcome_mod.BaselineComparison(
+        status=outcome_mod.CMP_NOT_EVALUATED, note="test 未執行，無法與 baseline 比較。"
+    )
+
+    feasible_metrics = {
+        chash: result.validation.metrics_by_hash[chash]
+        for chash, ce in result.constraint_evals.items()
+        if ce.feasible and result.validation and chash in result.validation.metrics_by_hash
+    }
+    selection = outcome_mod.analyze_selection(
+        search.recommended_config_hash,
+        feasible_metrics,
+        search_config.pareto_objectives,
+        tolerance=tol,
+        latency_order_reversed_on_test=_latency_order_reversed(result, search),
+    )
+    eligibility = outcome_mod.assess_apply_eligibility(
+        recommended_config_hash=search.recommended_config_hash,
+        validation_constraints=list(result.constraint_evals.values()),
+        selection=selection,
+        test_outcome=test_outcome,
+    )
+    granularity = outcome_mod.sample_granularity(
+        {s: info.query_type_counts for s, info in result.split_manifest.splits.items()},
+        search_config.hard_constraints,
+    )
+    identifier_coverage = outcome_mod.identifier_unanswerable_coverage(
+        _unanswerable_identifiers(result)
+    )
+
+    return {
+        **test_outcome.to_dict(),
+        **comparison.to_dict(),
+        **selection.to_dict(),
+        **eligibility.to_dict(),
+        "metric_sample_granularity": granularity,
+        "identifier_unanswerable_coverage": identifier_coverage,
+    }
+
+
+def _latency_order_reversed(
+    result: "SearchResult", search: OptimizerSearch
+) -> Optional[bool]:
+    """baseline 與 recommendation 的 p95 相對順序，validation 與 test 是否反轉。"""
+    if not (result.validation and result.test and search.recommended_config_hash):
+        return None
+    ref = MetricRef("p95_retrieval_latency_ms")
+    base_h, rec_h = search.baseline_config_hash, search.recommended_config_hash
+    try:
+        vb, _, _ = result.validation.metrics_by_hash[base_h].value(ref)
+        vr, _, _ = result.validation.metrics_by_hash[rec_h].value(ref)
+        tb, _, _ = result.test.metrics_by_hash[base_h].value(ref)
+        tr, _, _ = result.test.metrics_by_hash[rec_h].value(ref)
+    except KeyError:
+        return None
+    if None in (vb, vr, tb, tr):
+        return None
+    return (vr < vb) != (tr < tb)
+
+
+def _unanswerable_identifiers(result: "SearchResult") -> dict[str, list[dict[str, Any]]]:
+    """各 split 的 unanswerable 題所含 identifier（供 §五 揭露）。"""
+    from app.services.identifier_extractor import IdentifierExtractor
+
+    extractor = IdentifierExtractor()
+    out: dict[str, list[dict[str, Any]]] = {}
+    for split, info in result.split_manifest.splits.items():
+        if not info.dataset_path:
+            continue
+        try:
+            with open(info.dataset_path, encoding="utf-8") as f:
+                raw = json.load(f)
+        except (OSError, ValueError):  # pragma: no cover
+            continue
+        rows = []
+        for case in raw.get("cases", []):
+            if case.get("query_type") != "unanswerable":
+                continue
+            rows.append({
+                "case_id": case.get("id"),
+                "identifiers": extractor.extract_normalized(case.get("question", "")),
+            })
+        if rows:
+            out[split] = rows
+    return out
 
 
 def cleanup_search(search_id: str, repo: SearchRepository, provider) -> dict[str, str]:

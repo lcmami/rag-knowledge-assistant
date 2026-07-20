@@ -275,15 +275,23 @@ def build_search_report(
 
     # -- Recommendation --
     rec = result.recommendation
+    outcome = dict(getattr(result, "outcome", {}) or {})
     report["recommendation"] = {
         **(rec.to_dict() if rec else {}),
         "recommendation_locked": locked,
         "recommendation_locked_at": search.recommendation_locked_at,
+        # Slice 5A §三：證據強度與 apply 資格（與 lock 是兩件事）
+        "recommendation_apply_eligible": outcome.get("recommendation_apply_eligible"),
+        "recommendation_confidence": outcome.get("recommendation_confidence"),
+        "recommendation_selection_basis": outcome.get("recommendation_selection_basis"),
+        "apply_ineligible_reasons": outcome.get("apply_ineligible_reasons", []),
         "terminology_note": (
             "recommended_candidate 僅代表本次搜尋的建議，"
             "**不是** deployed / active / production candidate；本 Slice 不套用任何設定。"
         ),
     }
+    # Slice 5A §二～§六：完整結果語意與證據強度
+    report["outcome"] = outcome
     report["no_feasible_candidate_state"] = {
         "is_no_feasible_candidate": search.status
         in (
@@ -624,6 +632,87 @@ def render_search_markdown(report: dict[str, Any]) -> str:
         for key, d in sorted(test["baseline_vs_recommendation_delta"].items()):
             ap(f"| {key} | {d['baseline']:.4f} | {d['recommended']:.4f} | {d['delta']:+.4f} |")
     ap("")
+
+    # -- Slice 5A §二：兩種狀態必須分開呈現 --
+    oc = report.get("outcome") or {}
+    if oc:
+        ap("## Test 驗收語意（絕對門檻 vs 相對 Baseline）")
+        ap("")
+        ap(f"- **test_constraint_status**：`{oc.get('test_constraint_status')}`")
+        failed = oc.get("failed_test_constraints") or []
+        ap(f"- **failed_test_constraints**：{failed or '無'}")
+        ap(f"- **baseline_comparison_status**：`{oc.get('baseline_comparison_status')}`")
+        ap("")
+        ap("> Recommendation 仍保持原 Lock，不因 Test 結果換人。")
+        if oc.get("test_constraint_status") == "failed":
+            ap("> Test Constraint 驗收失敗。")
+        ap(f"> 相對 Baseline 結果為 {oc.get('baseline_comparison_status')}。")
+        ap("")
+        rows = oc.get("metrics") or []
+        if rows:
+            ap("| Metric | Direction | Baseline | Recommendation | Δ | 比較 |")
+            ap("|---|---|---:|---:|---:|---|")
+            for m in rows:
+                b = "n/a" if m["baseline_value"] is None else f"{m['baseline_value']:.4f}"
+                r_ = "n/a" if m["recommendation_value"] is None else f"{m['recommendation_value']:.4f}"
+                dl = "n/a" if m["delta"] is None else f"{m['delta']:+.4f}"
+                name = m["metric"] + (f"@{m['query_type']}" if m.get("query_type") else "")
+                ap(f"| {name} | {m['direction']} | {b} | {r_} | {dl} | {m['comparison']} |")
+            ap("")
+
+        ap("## Recommendation 證據強度")
+        ap("")
+        ap(f"- recommendation_apply_eligible：**{oc.get('recommendation_apply_eligible')}**")
+        ap(f"- recommendation_confidence：`{oc.get('recommendation_confidence')}`")
+        ap(f"- recommendation_selection_basis：`{oc.get('recommendation_selection_basis')}`")
+        ap(f"- 不具 apply 資格的原因：{oc.get('apply_ineligible_reasons') or '無'}")
+        ap(f"- quality_tie_candidate_count：{oc.get('quality_tie_candidate_count')}")
+        ap(f"- latency_measurement_repetitions：{oc.get('latency_measurement_repetitions')}")
+        ap(f"- latency_selection_stable：**{oc.get('latency_selection_stable')}**")
+        if oc.get("latency_order_reversed_on_test") is not None:
+            ap(f"- latency 相對順序在 test 上反轉：{oc.get('latency_order_reversed_on_test')}")
+        ap("")
+        # §六 的 tie-break 揭露與 §三 的 apply-eligibility 說明是兩段不同的文字，
+        # 兩段都必須出現（先前共用 "note" key，後者會蓋掉前者）。
+        for _note in (oc.get("selection_note"), oc.get("apply_eligibility_note")):
+            if _note:
+                for _line in str(_note).split("\n"):
+                    ap(f"> {_line}" if _line else ">")
+                ap("")
+
+        gran = oc.get("metric_sample_granularity") or {}
+        if gran:
+            ap("## Metric 樣本粒度")
+            ap("")
+            ap("| Split | Query Type | n | 可能取值 |")
+            ap("|---|---|---:|---|")
+            for row in gran.get("per_split", []):
+                vals = row["possible_values"]
+                shown = vals if len(vals) <= 6 else [vals[0], "…", vals[-1]]
+                ap(f"| {row['split']} | {row['query_type']} | {row['n']} | {shown} |")
+            ap("")
+            for n in gran.get("notes", []):
+                ap(f"> {n}")
+            ap("")
+
+        cov = oc.get("identifier_unanswerable_coverage") or {}
+        if cov:
+            ap("## Identifier-bearing Unanswerable 覆蓋")
+            ap("")
+            for split, info in sorted((cov.get("per_split") or {}).items()):
+                ap(f"- **{split}**：unanswerable {info['unanswerable_case_count']} 題，"
+                   f"其中帶 identifier {info['identifier_bearing_count']} 題")
+                for c in info["cases"]:
+                    ap(f"    - `{c['case_id']}` identifiers={c['identifiers'] or '[]'}")
+            ap("")
+            ap("```")
+            for line in str(cov.get("limitation", "")).splitlines():
+                ap(line)
+            ap("```")
+            if cov.get("required_followup"):
+                ap("")
+                ap(f"> {cov['required_followup']}")
+            ap("")
 
     c01 = report.get("c01_same_chunk_multi_identifier")
     if c01:
