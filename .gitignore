@@ -23,6 +23,9 @@ evaluation/runs/
 evaluation/cache/
 *.optimizer.db
 *.embedding-cache.db
+# Slice 5：Optimizer Search 產物（split dataset 副本 / optimizer-report.*）與測試暫存。
+evaluation/searches/
+evaluation/.pytest-tmp/
 
 # 向量資料庫本地儲存（若以本地目錄掛載時）
 qdrant_storage/

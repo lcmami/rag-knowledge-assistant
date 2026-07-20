@@ -175,12 +175,98 @@ _MIGRATION_0004 = [
     "ALTER TABLE trial_case_results ADD COLUMN retrieval_meta_json TEXT",
 ]
 
+# --------------------------------------------------------------------------
+# Slice 5（§十一）：Optimizer Search / Candidate 持久化。
+#
+# 兩張新表，與 Slice 2 的 evaluation_runs / retrieval_trials **並存**：一次 search 會
+# 為每個 split（tune / validation / test）各開一個 evaluation_run，candidate 則以
+# config_hash 對應到各 run 內的 trial。這樣可完整重用既有 runner 的 resume / retry /
+# fail-isolation / cleanup，而不需修改 Slice 2–4 任何程式。
+#
+# 關鍵不變式：
+# - UNIQUE(search_id, ordinal)：candidate 序號唯一，resume 不產生重複 candidate。
+# - UNIQUE(search_id, config_hash)：可執行 candidate 的設定唯一（非可執行者 hash 存 NULL，
+#   SQLite 的 UNIQUE 允許多個 NULL，故 invalid / duplicate / not_sampled 可並存）。
+# - test_trial_id 只有在 recommendation_locked=1 之後才允許寫入（§12.4，由
+#   SearchRepository 於寫入前檢查）。
+#
+# 均在**獨立 Optimizer DB**，永不加入正式 metadata.db。
+# --------------------------------------------------------------------------
+_MIGRATION_0005 = [
+    """
+    CREATE TABLE IF NOT EXISTS optimizer_searches (
+        search_id                 TEXT PRIMARY KEY,
+        search_name               TEXT NOT NULL,
+        status                    TEXT NOT NULL,
+        search_mode               TEXT NOT NULL,
+        search_config_json        TEXT NOT NULL,
+        search_config_hash        TEXT NOT NULL,
+        dataset_version           TEXT,
+        dataset_hash              TEXT,
+        corpus_hash               TEXT,
+        code_commit               TEXT,
+        working_tree_dirty        INTEGER,
+        random_seed               INTEGER NOT NULL DEFAULT 42,
+        max_candidates            INTEGER NOT NULL DEFAULT 32,
+        validation_top_n          INTEGER NOT NULL DEFAULT 8,
+        baseline_config_hash      TEXT,
+        recommended_config_hash   TEXT,
+        recommendation_locked     INTEGER NOT NULL DEFAULT 0,
+        recommendation_locked_at  TEXT,
+        test_evaluated            INTEGER NOT NULL DEFAULT 0,
+        created_at                TEXT,
+        started_at                TEXT,
+        completed_at              TEXT,
+        error                     TEXT,
+        report_json_path          TEXT,
+        report_markdown_path      TEXT,
+        tune_run_id               TEXT,
+        validation_run_id         TEXT,
+        test_run_id               TEXT,
+        generation_stats_json     TEXT,
+        candidate_manifest_json   TEXT,
+        split_manifest_json       TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS optimizer_candidates (
+        search_id                    TEXT NOT NULL,
+        candidate_id                 TEXT PRIMARY KEY,
+        ordinal                      INTEGER NOT NULL,
+        config_json                  TEXT NOT NULL,
+        config_hash                  TEXT,
+        generation_status            TEXT NOT NULL,
+        generation_rejection_reason  TEXT,
+        duplicate_of_hash            TEXT,
+        is_baseline                  INTEGER NOT NULL DEFAULT 0,
+        tune_trial_id                TEXT,
+        validation_trial_id          TEXT,
+        test_trial_id                TEXT,
+        tune_status                  TEXT NOT NULL,
+        validation_status            TEXT NOT NULL,
+        test_status                  TEXT NOT NULL,
+        tune_rank                    INTEGER,
+        constraint_results_json      TEXT,
+        feasible                     INTEGER,
+        pareto_member                INTEGER,
+        pareto_rank                  INTEGER,
+        recommendation_rank          INTEGER,
+        rejection_reasons_json       TEXT,
+        UNIQUE(search_id, ordinal),
+        UNIQUE(search_id, config_hash),
+        FOREIGN KEY(search_id) REFERENCES optimizer_searches(search_id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_candidates_search ON optimizer_candidates(search_id)",
+]
+
 # (version, [statements])
 MIGRATIONS: list[tuple[str, list[str]]] = [
     ("0001_initial", _MIGRATION_0001),
     ("0002_runs_trials", _MIGRATION_0002),
     ("0003_chunk_cache_stats", _MIGRATION_0003),
     ("0004_retrieval_meta", _MIGRATION_0004),
+    ("0005_optimizer_search", _MIGRATION_0005),
 ]
 
 _SCHEMA_MIGRATIONS_DDL = """

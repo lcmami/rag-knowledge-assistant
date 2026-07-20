@@ -1,0 +1,152 @@
+{
+  "schema_version": "1.0",
+  "search_name": "slice5-optimizer-smoke",
+  "search_mode": "grid",
+  "random_seed": 42,
+  "max_candidates": 24,
+  "validation_top_n": 8,
+  "dataset_path": "evaluation/datasets/v1.1/cases.json",
+  "corpus_paths": [
+    "sample_docs",
+    "evaluation/fixtures"
+  ],
+  "keep_trial_collections": false,
+  "policy_source": "slice0_baseline_recommendation",
+  "policy_confidence": "low",
+  "baseline": {
+    "chunk_config": {
+      "strategy": "current"
+    },
+    "retrieval_config": {
+      "strategy": "dense",
+      "top_k": 5,
+      "score_threshold": 0.55,
+      "candidate_multiplier": 3,
+      "candidate_cap": 50
+    }
+  },
+  "search_space": {
+    "chunking": {
+      "strategy": ["current", "paragraph", "heading"],
+      "prepend_section_title": [false, true]
+    },
+    "retrieval": {
+      "strategy": ["dense", "identifier_aware"],
+      "identifier_vector_floor": [0.4, 0.5]
+    }
+  },
+  "hard_constraints": [
+    {
+      "name": "exact_code_top1_floor",
+      "metric": "exact_code_top1_accuracy",
+      "scope": "aggregate",
+      "operator": ">=",
+      "value": 0.75,
+      "safety_critical": true,
+      "on_not_computable": "fail"
+    },
+    {
+      "name": "unanswerable_false_positive_ceiling",
+      "metric": "unanswerable_false_positive_rate",
+      "scope": "aggregate",
+      "operator": "<=",
+      "value": 0.25,
+      "safety_critical": true,
+      "on_not_computable": "fail"
+    },
+    {
+      "name": "p95_latency_ceiling_ms",
+      "metric": "p95_retrieval_latency_ms",
+      "scope": "aggregate",
+      "operator": "<=",
+      "value": 86,
+      "safety_critical": false,
+      "on_not_computable": "fail"
+    },
+    {
+      "name": "semantic_no_regression",
+      "metric": "relevant_context_hit_at_5",
+      "scope": "query_type",
+      "query_type": "semantic",
+      "operator": ">=",
+      "baseline_delta": -0.2,
+      "safety_critical": false,
+      "on_not_computable": "fail"
+    }
+  ],
+  "pareto_objectives": [
+    {
+      "metric": "exact_code_top1_accuracy",
+      "scope": "aggregate",
+      "direction": "maximize",
+      "on_not_computable": "exclude_candidate"
+    },
+    {
+      "metric": "graded_ndcg_at_5",
+      "scope": "aggregate",
+      "direction": "maximize",
+      "on_not_computable": "exclude_candidate"
+    },
+    {
+      "metric": "mrr",
+      "scope": "aggregate",
+      "direction": "maximize",
+      "on_not_computable": "exclude_candidate"
+    },
+    {
+      "metric": "relevant_context_hit_at_5",
+      "scope": "query_type",
+      "query_type": "semantic",
+      "direction": "maximize",
+      "on_not_computable": "exclude_candidate"
+    },
+    {
+      "metric": "unanswerable_false_positive_rate",
+      "scope": "aggregate",
+      "direction": "minimize",
+      "on_not_computable": "exclude_candidate"
+    },
+    {
+      "metric": "duplicate_ratio",
+      "scope": "aggregate",
+      "direction": "minimize",
+      "on_not_computable": "exclude_candidate"
+    },
+    {
+      "metric": "p95_retrieval_latency_ms",
+      "scope": "aggregate",
+      "direction": "minimize",
+      "on_not_computable": "exclude_candidate"
+    }
+  ],
+  "recommendation_policy": {
+    "complexity_version": "v1",
+    "float_tolerance": 1e-9,
+    "tune_ranking": [
+      { "key": "constraint_pass_count", "direction": "maximize" },
+      { "key": "exact_code_top1_accuracy", "direction": "maximize" },
+      { "key": "unanswerable_false_positive_rate", "direction": "minimize" },
+      { "key": "graded_ndcg_at_5", "direction": "maximize" },
+      { "key": "mrr", "direction": "maximize" },
+      { "key": "duplicate_ratio", "direction": "minimize" },
+      { "key": "p95_retrieval_latency_ms", "direction": "minimize" },
+      { "key": "config_hash", "direction": "minimize" }
+    ],
+    "recommendation_ranking": [
+      { "key": "exact_code_top1_accuracy", "direction": "maximize" },
+      { "key": "unanswerable_false_positive_rate", "direction": "minimize" },
+      { "key": "graded_ndcg_at_5", "direction": "maximize" },
+      { "key": "mrr", "direction": "maximize" },
+      {
+        "key": "relevant_context_hit_at_5",
+        "scope": "query_type",
+        "query_type": "semantic",
+        "direction": "maximize"
+      },
+      { "key": "duplicate_ratio", "direction": "minimize" },
+      { "key": "p95_retrieval_latency_ms", "direction": "minimize" },
+      { "key": "config_complexity", "direction": "minimize" },
+      { "key": "config_hash", "direction": "minimize" }
+    ]
+  }
+}
