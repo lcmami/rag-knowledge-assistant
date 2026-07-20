@@ -28,7 +28,11 @@ from evaluation.v11.run_models import TrialMetric
 # --------------------------------------------------------------------------
 @dataclass
 class RankedResult:
-    """一筆排序後的 retrieved chunk（含 provenance，供 EvidenceMatcher 判定）。"""
+    """一筆排序後的 retrieved chunk（含 provenance，供 EvidenceMatcher 判定）。
+
+    ``score`` 一律為 **raw vector score**（§十七：不得改成 boost 後 ranking score）。Slice 4
+    identifier-aware 的 ranking 明細以 additive 選填欄位保存（dense / 舊 provider 為 None）。
+    """
 
     rank: int
     document_id: Optional[str]
@@ -42,6 +46,14 @@ class RankedResult:
     provenance_spans: list[dict] = field(default_factory=list)
     identifiers: list[str] = field(default_factory=list)
     canonical_text_version: Optional[str] = None
+    # --- Slice 4（§十七）：identifier-aware ranking 明細（None → 未套用 / dense）---
+    ranking_score: Optional[float] = None
+    exact_identifier_matches: list[str] = field(default_factory=list)
+    conflicting_identifiers: list[str] = field(default_factory=list)
+    exact_match_boost: Optional[float] = None
+    confusable_penalty: Optional[float] = None
+    candidate_sources: list[str] = field(default_factory=list)
+    admission_reason: Optional[str] = None
 
 
 @dataclass
@@ -113,21 +125,34 @@ class CaseEvaluation:
 
     # 供 trial_case_results 持久化
     def top_results_payload(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "rank": s.result.rank,
-                "document_id": s.result.document_id,
-                "filename": s.result.filename,
-                "section": s.result.section,
-                "page": s.result.page,
-                "chunk_index": s.result.chunk_index,
-                "score": round(s.result.score, 4) if s.result.score is not None else None,
+        out: list[dict[str, Any]] = []
+        for s in self.scored:
+            r = s.result
+            item: dict[str, Any] = {
+                "rank": r.rank,
+                "document_id": r.document_id,
+                "filename": r.filename,
+                "section": r.section,
+                "page": r.page,
+                "chunk_index": r.chunk_index,
+                # score 保持 raw vector score（§十七）。
+                "score": round(r.score, 4) if r.score is not None else None,
                 "relevance_level": s.relevance_level,
-                "identifiers": list(s.result.identifiers),
+                "identifiers": list(r.identifiers),
                 "is_duplicate": s.is_duplicate,
             }
-            for s in self.scored
-        ]
+            # Slice 4 identifier-aware ranking 明細（存在才輸出，dense 不變更既有欄位）。
+            if r.ranking_score is not None:
+                item["vector_score"] = round(r.score, 4) if r.score is not None else None
+                item["ranking_score"] = round(r.ranking_score, 4)
+                item["exact_identifier_matches"] = list(r.exact_identifier_matches)
+                item["conflicting_identifiers"] = list(r.conflicting_identifiers)
+                item["exact_match_boost"] = r.exact_match_boost
+                item["confusable_penalty"] = r.confusable_penalty
+                item["candidate_sources"] = list(r.candidate_sources)
+                item["admission_reason"] = r.admission_reason
+            out.append(item)
+        return out
 
     def evidence_match_payload(self) -> dict[str, Any]:
         return {

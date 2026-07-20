@@ -167,11 +167,20 @@ _MIGRATION_0003 = [
     "ALTER TABLE retrieval_trials ADD COLUMN chunk_cache_stats_json TEXT",
 ]
 
+# --------------------------------------------------------------------------
+# Slice 4（§十八.4 / §十九）：identifier-aware 每題 retrieval 明細（additive）。
+# 純追加欄位；舊 case result row 缺此欄位以 NULL 退化。獨立 Optimizer DB，不動正式 metadata.db。
+# --------------------------------------------------------------------------
+_MIGRATION_0004 = [
+    "ALTER TABLE trial_case_results ADD COLUMN retrieval_meta_json TEXT",
+]
+
 # (version, [statements])
 MIGRATIONS: list[tuple[str, list[str]]] = [
     ("0001_initial", _MIGRATION_0001),
     ("0002_runs_trials", _MIGRATION_0002),
     ("0003_chunk_cache_stats", _MIGRATION_0003),
+    ("0004_retrieval_meta", _MIGRATION_0004),
 ]
 
 _SCHEMA_MIGRATIONS_DDL = """
@@ -633,13 +642,14 @@ class OptimizerRepository:
                     INSERT INTO trial_case_results
                         (trial_id, case_id, case_status, query_type, answerable,
                          latency_ms, first_relevant_rank, top_results_json,
-                         evidence_match_json, error)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         evidence_match_json, error, retrieval_meta_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         trial_id, c.case_id, c.case_status, c.query_type,
                         1 if c.answerable else 0, c.latency_ms, c.first_relevant_rank,
                         c.top_results_json, c.evidence_match_json, c.error,
+                        c.retrieval_meta_json,
                     ),
                 )
             conn.execute("COMMIT")
@@ -670,6 +680,9 @@ class OptimizerRepository:
                 top_results_json=r["top_results_json"],
                 evidence_match_json=r["evidence_match_json"],
                 error=r["error"],
+                retrieval_meta_json=(
+                    r["retrieval_meta_json"] if "retrieval_meta_json" in r.keys() else None
+                ),
             )
             for r in rows
         ]

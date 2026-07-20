@@ -32,6 +32,21 @@ KNOWN_LIMITATIONS = [
     "每個 Trial 保存完整展開的 chunk_config（含 target_chars/overlap_chars/max_tokens），"
     "config hash 涵蓋展開後的實際值，chunk_config_origin=explicit_trial_config；Optimizer 不讀取 "
     ".env / Settings 覆寫值。若要評估 Production Active Config，須由使用者明確匯出為 Trial Config。",
+    # Slice 4：identifier-aware retrieval 範圍與限制。
+    "Slice 4 只提供明確列出的 dense / identifier_aware Trial；不做 grid/random/bayesian 搜尋、"
+    "不自動選 Best、不做 BM25/sparse/RRF/reranker/query expansion。identifier-aware 對含 query "
+    "identifier 的結果加 binary exact-match boost、對僅含其他 identifier 者加 confusable penalty；"
+    "raw vector_score 不被改寫（score 欄位仍為 raw），boost 後 ranking_score 與 cosine threshold "
+    "不同尺度，故 admission 以 raw vector_score 判定（exact candidate 用 identifier_vector_floor，"
+    "其餘用 score_threshold），不以 ranking_score 比 threshold。Query 無 identifier 時退化為 dense 等價。"
+    "正式 /api/retrieve 與 Production 預設 retrieval 不變。",
+    # Slice 4 §四：identifier matching 的語意界線（Slice 5 硬限制淘汰依據）。
+    "Exact identifier matching proves that a document contains the queried identifier, "
+    "but does not prove that the document answers the requested attribute or intent. "
+    "A permissive identifier_vector_floor may therefore improve exact-code recall "
+    "while increasing false positives for unanswerable identifier queries. "
+    "The floor, boost, penalty, threshold, and candidate limits are optimization "
+    "parameters to be evaluated under Slice 5 hard constraints.",
 ]
 
 
@@ -144,6 +159,10 @@ def build_report(
                         "first_relevant_rank": c.first_relevant_rank,
                         "top_results": json.loads(c.top_results_json),
                         "evidence_match": json.loads(c.evidence_match_json),
+                        # Slice 4（§十九）：identifier-aware 每題 retrieval 明細（dense 為 None）。
+                        "retrieval_meta": (
+                            json.loads(c.retrieval_meta_json) if c.retrieval_meta_json else None
+                        ),
                         "error": c.error,
                     }
                     for c in case_results
@@ -254,6 +273,16 @@ def render_markdown(report: dict[str, Any]) -> str:
     for t in report["trials"]:
         ap(f"## Trial: {t['trial_name']} (ordinal {t['ordinal']})")
         ap(f"- Status: **{t['status']}** · Attempts: {t['attempt_count']}")
+        rc = ((t.get("config") or {}).get("retrieval_config")) or {}
+        if rc:
+            line = (f"- Retrieval Strategy: **{rc.get('strategy')}** · "
+                    f"Ranking Version: `{rc.get('ranking_version')}`")
+            if rc.get("strategy") == "identifier_aware":
+                line += (f" · boost={rc.get('exact_match_boost')} "
+                         f"penalty={rc.get('confusable_penalty')} "
+                         f"id_floor={rc.get('identifier_vector_floor')} "
+                         f"score_threshold={rc.get('score_threshold')}")
+            ap(line)
         ap(f"- Config Hash: `{t['config_hash']}`")
         ap(f"- Collection: `{t['collection_name']}` · Cleanup: **{t['cleanup_status']}**")
         ap(f"- Point Count: {t['point_count']} · Index Build: {t['index_build_time_ms']} ms "
@@ -285,12 +314,29 @@ def render_markdown(report: dict[str, Any]) -> str:
         for c in t["cases"]:
             ap(f"- **{c['case_id']}** [{c['query_type']}] status=`{c['case_status']}` "
                f"first_relevant_rank={c['first_relevant_rank']} latency={c['latency_ms']}ms")
+            rm = c.get("retrieval_meta")
+            if rm:
+                qids = ",".join(rm.get("query_identifiers") or []) or "-"
+                ap(f"    - retrieval: strategy=`{rm.get('strategy_name')}` "
+                   f"query_ids=[{qids}] dense={rm.get('dense_candidate_count')} "
+                   f"id={rm.get('identifier_candidate_count')} union={rm.get('union_candidate_count')} "
+                   f"dedup={rm.get('deduplicated_count')} exact={rm.get('exact_match_candidate_count')} "
+                   f"confusable={rm.get('confusable_candidate_count')} "
+                   f"rej_thr={rm.get('threshold_rejected_count')} "
+                   f"rej_floor={rm.get('identifier_floor_rejected_count')}")
             for r in c["top_results"]:
                 ident = ",".join(r.get("identifiers") or []) or "-"
                 dup = " dup" if r.get("is_duplicate") else ""
-                ap(f"    - #{r['rank']} `{r.get('filename')}` / {r.get('section')} "
-                   f"(p{r.get('page')}) score={r.get('score')} rel={r['relevance_level']} "
-                   f"id=[{ident}]{dup}")
+                base = (f"    - #{r['rank']} `{r.get('filename')}` / {r.get('section')} "
+                        f"(p{r.get('page')}) score={r.get('score')} rel={r['relevance_level']} "
+                        f"id=[{ident}]{dup}")
+                if r.get("ranking_score") is not None:
+                    srcs = "+".join(r.get("candidate_sources") or [])
+                    em = ",".join(r.get("exact_identifier_matches") or []) or "-"
+                    base += (f" | rank_score={r.get('ranking_score')} "
+                             f"boost={r.get('exact_match_boost')} penalty={r.get('confusable_penalty')} "
+                             f"exact=[{em}] src={srcs} admit={r.get('admission_reason')}")
+                ap(base)
             em = c["evidence_match"]
             matches = em.get("matches", []) if isinstance(em, dict) else em
             reasons = sorted({rr for mm in matches for rr in mm.get("match_reasons", [])})

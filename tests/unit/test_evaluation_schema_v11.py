@@ -153,9 +153,10 @@ def test_does_not_touch_production_metadata_db(tmp_path):
 def test_migration_idempotent(tmp_path):
     db = str(tmp_path / "optimizer.db")
     repo = OptimizerRepository(db)
-    # Slice 2 追加 0002_runs_trials；Slice 3 追加 0003_chunk_cache_stats（版本排序）。
+    # Slice 2 追加 0002_runs_trials；Slice 3 追加 0003_chunk_cache_stats；
+    # Slice 4 追加 0004_retrieval_meta（版本排序）。
     assert repo.applied_migrations() == [
-        "0001_initial", "0002_runs_trials", "0003_chunk_cache_stats",
+        "0001_initial", "0002_runs_trials", "0003_chunk_cache_stats", "0004_retrieval_meta",
     ]
     # 再建立一次 repo（等於再跑一次 migration）→ 不重複套用
     conn = sqlite3.connect(db, isolation_level=None)

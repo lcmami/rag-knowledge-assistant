@@ -76,6 +76,8 @@ class IndexOutcome:
 class RetrievalOutcome:
     results: list[RankedResult]
     retrieval_time_ms: int
+    # Slice 4（§十八.4）：identifier-aware 每題 strategy 明細（dense / fake 為空 → 不持久化）。
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 class TrialServiceProvider(Protocol):
@@ -386,6 +388,7 @@ def _execute_trial(
         index_universe = provider.index_manifest(collection)
 
         case_retrievals: list[CaseRetrieval] = []
+        retrieval_meta_by_case: dict[str, dict] = {}
         total_retrieval = 0
         for case in dataset.cases:
             ro = provider.retrieve(collection, tc, case.question, tc.top_k)
@@ -393,6 +396,8 @@ def _execute_trial(
             case_retrievals.append(
                 CaseRetrieval(case=case, results=ro.results, latency_ms=ro.retrieval_time_ms)
             )
+            if ro.meta:
+                retrieval_meta_by_case[case.id] = ro.meta
 
         evaluation = evaluate_trial(
             case_retrievals,
@@ -405,7 +410,10 @@ def _execute_trial(
         # 持久化 case results + metrics（在 cleanup 之前，確保清理失敗仍保有 metrics）
         repo.save_trial_case_results(
             trial.trial_id,
-            [_case_result_row(trial.trial_id, ce) for ce in evaluation.case_evaluations],
+            [
+                _case_result_row(trial.trial_id, ce, retrieval_meta_by_case.get(ce.case_id))
+                for ce in evaluation.case_evaluations
+            ],
         )
         for m in evaluation.metrics:
             m.trial_id = trial.trial_id
@@ -469,7 +477,9 @@ def _cleanup_trial_collection(
         trial.error = (trial.error + " | " + note) if trial.error else note
 
 
-def _case_result_row(trial_id: str, ce: CaseEvaluation) -> TrialCaseResult:
+def _case_result_row(
+    trial_id: str, ce: CaseEvaluation, retrieval_meta: Optional[dict] = None
+) -> TrialCaseResult:
     return TrialCaseResult(
         trial_id=trial_id,
         case_id=ce.case_id,
@@ -480,6 +490,9 @@ def _case_result_row(trial_id: str, ce: CaseEvaluation) -> TrialCaseResult:
         first_relevant_rank=ce.first_relevant_rank,
         top_results_json=hashing.canonical_json(ce.top_results_payload()),
         evidence_match_json=hashing.canonical_json(ce.evidence_match_payload()),
+        retrieval_meta_json=(
+            hashing.canonical_json(retrieval_meta) if retrieval_meta else None
+        ),
     )
 
 

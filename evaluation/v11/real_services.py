@@ -46,8 +46,7 @@ _DOCUMENT_TYPES = {
 
 @dataclass
 class _TrialContext:
-    store: object
-    retrieval: object
+    store: object  # VectorStore（bound 到隔離 collection；backend 由此取 client + collection）
 
 
 class RealTrialServiceProvider:
@@ -130,7 +129,6 @@ class RealTrialServiceProvider:
     ) -> IndexOutcome:
         from app.services.canonical_builder import build_canonical_document
         from app.services.document_loader import load_document
-        from app.services.retrieval_service import RetrievalService
         from app.services.vector_store import VectorStore
 
         assert_deletable(collection_name)  # optimizer_ 前綴（防誤用正式名稱）
@@ -195,14 +193,9 @@ class RealTrialServiceProvider:
         build_time_ms = int((time.perf_counter() - start) * 1000)
         point_count = self._client.count(collection_name).count
 
-        retrieval = RetrievalService(
-            self._embedding,  # query embedding 走底層（不快取，§十七.10）
-            store,
-            score_threshold=trial_config.score_threshold,
-            candidate_multiplier=trial_config.candidate_multiplier,
-            candidate_cap=trial_config.candidate_cap,
-        )
-        self._contexts[collection_name] = _TrialContext(store, retrieval)
+        # Slice 4：retrieval 改由版本化 RetrievalStrategy 執行（dense / identifier_aware）；
+        # query embedding 於 retrieve() 一次算好、走底層不快取（§十七.10 / §十一.5）。
+        self._contexts[collection_name] = _TrialContext(store)
 
         assert self._fingerprint is not None
         stats = {
@@ -273,28 +266,58 @@ class RealTrialServiceProvider:
     def retrieve(
         self, collection_name: str, trial_config: TrialConfig, question: str, top_k: int
     ) -> RetrievalOutcome:
+        from evaluation.v11.retrieval.base import RetrievalRequest, build_retrieval_strategy
+        from evaluation.v11.retrieval.qdrant_backend import QdrantSearchBackend
+
         ctx = self._contexts.get(collection_name)
         if ctx is None:
             raise RuntimeError(f"collection {collection_name!r} 尚未建索引。")
-        result = ctx.retrieval.retrieve(question, top_k)
+
+        rc = trial_config.retrieval_config_obj()
+        start = time.perf_counter()
+        # 每 Trial 每題算一次 query embedding（不快取，§十七.10 / §十八.11）。
+        query_vector = self._embedding.embed_query(question)
+        backend = QdrantSearchBackend(ctx.store.client, ctx.store.collection)
+        strategy = build_retrieval_strategy(rc.strategy)
+        outcome = strategy.retrieve(
+            RetrievalRequest(
+                query=question,
+                query_vector=query_vector,
+                collection_name=collection_name,
+                config=rc,
+            ),
+            backend,
+        )
+        retrieval_time_ms = int((time.perf_counter() - start) * 1000)
+
         ranked = [
             RankedResult(
-                rank=rank,
-                document_id=c.document_id,
-                document_sha256=c.file_hash,
-                filename=c.filename,
-                section=c.section,
-                page=c.page,
-                chunk_index=c.chunk_index,
-                score=c.score,
-                text=c.text,
-                provenance_spans=list(c.provenance_spans or []),
-                identifiers=list(c.identifiers or []),
-                canonical_text_version=c.canonical_text_version,
+                rank=r.rank,
+                document_id=r.document_id,
+                document_sha256=r.file_hash,
+                filename=r.filename,
+                section=r.section,
+                page=r.page,
+                chunk_index=r.chunk_index,
+                score=r.vector_score,  # §十七：score 保持 raw vector score
+                text=r.text,
+                provenance_spans=list(r.provenance_spans or []),
+                identifiers=list(r.identifiers or []),
+                canonical_text_version=r.canonical_text_version,
+                ranking_score=r.ranking_score,
+                exact_identifier_matches=list(r.exact_identifier_matches),
+                conflicting_identifiers=list(r.conflicting_identifiers),
+                exact_match_boost=r.exact_match_boost,
+                confusable_penalty=r.confusable_penalty,
+                candidate_sources=list(r.candidate_sources),
+                admission_reason=r.admission_reason,
             )
-            for rank, c in enumerate(result.results, start=1)
+            for r in outcome.results
         ]
-        return RetrievalOutcome(results=ranked, retrieval_time_ms=result.retrieval_time_ms)
+        # dense 也提供 meta（strategy/ranking version + counts），供 Report 一致呈現。
+        return RetrievalOutcome(
+            results=ranked, retrieval_time_ms=retrieval_time_ms, meta=outcome.meta()
+        )
 
     def collection_exists(self, collection_name: str) -> bool:
         return bool(self._client.collection_exists(collection_name))

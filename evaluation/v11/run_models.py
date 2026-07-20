@@ -23,6 +23,7 @@ from evaluation.v11.chunking.config import (
     ChunkingConfig,
 )
 from evaluation.v11.hashing import canonical_json, config_hash
+from evaluation.v11.retrieval.config import RetrievalConfig, RetrievalConfigError
 
 CONFIG_SCHEMA_VERSION = "1.0"
 
@@ -61,26 +62,52 @@ class RunConfigError(Exception):
 # --------------------------------------------------------------------------
 # TrialConfig
 # --------------------------------------------------------------------------
+def _default_retrieval() -> dict[str, Any]:
+    return RetrievalConfig.from_raw(None).to_canonical_dict()
+
+
 @dataclass(frozen=True)
 class TrialConfig:
-    """單一 Trial 的固定 Chunking / Dense Retrieval 設定（§六）。"""
+    """單一 Trial 的固定 Chunking / Retrieval 設定（Slice 2 §六 / Slice 4 §八、§十八）。
+
+    ``retrieval`` 為 :class:`RetrievalConfig` 展開後的 canonical dict（含 strategy /
+    ranking_version / 展開後所有 ranking 參數），故 config_hash 涵蓋完整 retrieval 語意。
+    ``top_k`` 等為便利 property（沿用 Slice 2/3 呼叫端）。
+    """
 
     trial_name: str
     chunk_config: dict[str, Any] = field(default_factory=lambda: {"strategy": "current"})
-    top_k: int = 5
-    score_threshold: float = 0.55
-    candidate_multiplier: int = 3
-    candidate_cap: int = 50
+    retrieval: dict[str, Any] = field(default_factory=_default_retrieval)
     collection_options: dict[str, Any] = field(default_factory=dict)
     schema_version: str = CONFIG_SCHEMA_VERSION
 
+    @property
+    def strategy(self) -> str:
+        return self.retrieval["strategy"]
+
+    @property
+    def top_k(self) -> int:
+        return self.retrieval["top_k"]
+
+    @property
+    def score_threshold(self) -> float:
+        return self.retrieval["score_threshold"]
+
+    @property
+    def candidate_multiplier(self) -> int:
+        return self.retrieval["candidate_multiplier"]
+
+    @property
+    def candidate_cap(self) -> int:
+        return self.retrieval["candidate_cap"]
+
     def retrieval_config(self) -> dict[str, Any]:
-        return {
-            "top_k": self.top_k,
-            "score_threshold": self.score_threshold,
-            "candidate_multiplier": self.candidate_multiplier,
-            "candidate_cap": self.candidate_cap,
-        }
+        """完整展開的 canonical retrieval config（§八.8：hash 涵蓋展開值）。"""
+        return dict(self.retrieval)
+
+    def retrieval_config_obj(self) -> RetrievalConfig:
+        """重建版本化 :class:`RetrievalConfig`（strategy 分派 / 執行用）。"""
+        return RetrievalConfig.from_raw(self.retrieval)
 
     def hashable(
         self,
@@ -146,21 +173,16 @@ class TrialConfig:
         retrieval = raw.get("retrieval_config") or {}
         if not isinstance(retrieval, dict):
             raise RunConfigError(f"trials[{index}] retrieval_config 必須是物件。")
-
-        top_k = retrieval.get("top_k", 5)
-        if not isinstance(top_k, int) or top_k < 1:
-            raise RunConfigError(f"trials[{index}] top_k 必須為 >=1 的整數。")
-        threshold = retrieval.get("score_threshold", 0.55)
-        if not isinstance(threshold, (int, float)):
-            raise RunConfigError(f"trials[{index}] score_threshold 必須為數值。")
+        # 嚴格驗證 + canonical 化（Slice 4 §八）：strategy / ranking 參數展開後才計 config_hash。
+        try:
+            retrieval_canonical = RetrievalConfig.from_raw(retrieval).to_canonical_dict()
+        except RetrievalConfigError as exc:
+            raise RunConfigError(f"trials[{index}] retrieval_config 無效：{exc}") from exc
 
         return cls(
             trial_name=name.strip(),
             chunk_config=chunk_config,
-            top_k=top_k,
-            score_threshold=float(threshold),
-            candidate_multiplier=int(retrieval.get("candidate_multiplier", 3)),
-            candidate_cap=int(retrieval.get("candidate_cap", 50)),
+            retrieval=retrieval_canonical,
             collection_options=raw.get("collection_options") or {},
             schema_version=str(raw.get("schema_version", CONFIG_SCHEMA_VERSION)),
         )
@@ -327,3 +349,6 @@ class TrialCaseResult:
     top_results_json: str
     evidence_match_json: str
     error: Optional[str] = None
+    # Slice 4（§十八.4 / §十九）：identifier-aware 每題 retrieval 明細（query identifiers、
+    # dense/identifier/union/dedup/exact/penalty/threshold-rejection counts、strategy/ranking version）。
+    retrieval_meta_json: Optional[str] = None
