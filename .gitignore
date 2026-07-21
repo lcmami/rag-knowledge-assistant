@@ -26,6 +26,10 @@ evaluation/cache/
 # Slice 5：Optimizer Search 產物（split dataset 副本 / optimizer-report.*）與測試暫存。
 evaluation/searches/
 evaluation/.pytest-tmp/
+# Slice 6：Review Session / Draft Dataset / Review Report / Review DB 不入庫（§二十一）。
+# 注意：evaluation/datasets/ 仍為受追蹤資產，不得忽略——只忽略 reviews/ 產物。
+evaluation/reviews/
+*.review.db
 
 # 向量資料庫本地儲存（若以本地目錄掛載時）
 qdrant_storage/
