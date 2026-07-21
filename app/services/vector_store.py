@@ -50,18 +50,26 @@ class VectorStore:
                 details={"expected": "Cosine", "actual": str(existing_distance)},
             )
 
+    # v1.1 Slice 1（§十一）：identifiers 以 keyword payload index 精確比對。
+    # 僅於「新建 collection」時建立，既有正式 collection 不受影響（不會重建）。
+    _KEYWORD_INDEX_FIELDS = ("document_id", "file_hash", "identifiers")
+
     def _create_payload_indexes(self) -> None:
+        for field in self._KEYWORD_INDEX_FIELDS:
+            self.create_keyword_index(field)
+
+    def create_keyword_index(self, field_name: str) -> None:
+        """在目前 collection 建立單一 keyword payload index（idempotent）。"""
         from qdrant_client import models
 
-        for field in ("document_id", "file_hash"):
-            try:
-                self.client.create_payload_index(
-                    collection_name=self.collection,
-                    field_name=field,
-                    field_schema=models.PayloadSchemaType.KEYWORD,
-                )
-            except Exception:  # noqa: BLE001 - index 可能已存在
-                pass
+        try:
+            self.client.create_payload_index(
+                collection_name=self.collection,
+                field_name=field_name,
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+        except Exception:  # noqa: BLE001 - index 可能已存在
+            pass
 
     def upsert_chunks(self, chunks: list[Chunk], vectors: list[list[float]]) -> None:
         from qdrant_client import models

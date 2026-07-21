@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "run_name": "slice4-identifier-smoke",
+  "random_seed": 42,
+  "dataset_path": "evaluation/datasets/v1.1/cases.json",
+  "corpus_paths": [
+    "sample_docs",
+    "evaluation/fixtures"
+  ],
+  "fail_fast": false,
+  "retry_failed": false,
+  "retry_interrupted": true,
+  "keep_trial_collections": false,
+  "trials": [
+    {
+      "trial_name": "A-dense-baseline",
+      "chunk_config": {
+        "strategy": "current"
+      },
+      "retrieval_config": {
+        "strategy": "dense",
+        "top_k": 5,
+        "score_threshold": 0.55,
+        "candidate_multiplier": 3,
+        "candidate_cap": 50
+      }
+    },
+    {
+      "trial_name": "B-identifier-aware",
+      "chunk_config": {
+        "strategy": "current"
+      },
+      "retrieval_config": {
+        "strategy": "identifier_aware",
+        "top_k": 5,
+        "score_threshold": 0.55,
+        "candidate_multiplier": 3,
+        "candidate_cap": 50,
+        "identifier_candidate_cap": 20,
+        "exact_match_boost": 0.2,
+        "confusable_penalty": 0.15,
+        "identifier_vector_floor": 0.4,
+        "ranking_version": "identifier_aware_v1"
+      }
+    }
+  ]
+}

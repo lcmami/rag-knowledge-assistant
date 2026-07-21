@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,6 +48,25 @@ class Settings(BaseSettings):
     # 0.55 為目前資料集的 threshold 校準結果（Phase 5 §2）；正式 /api/query 預設採用。
     # 保留環境變數覆寫能力；Evaluation Script 仍可明確指定 0.0 進行原始分數分析。
     retrieval_score_threshold: float = 0.55
+
+    # --- v1.1 Optimizer Admin（Slice 7 §六 / §二十）---
+    # Admin Write API 預設**停用**；停用時 write endpoint 不得執行任何 service（§二十.1/.2）。
+    optimizer_admin_enabled: bool = False
+    # Logical Alias 與 versioned physical collection 前綴（正式概念，§六 / §七）。
+    # 未初始化前 Production 仍直接使用既有 qdrant_collection（factory_knowledge），
+    # 本 Slice 不自動建立此 alias。
+    optimizer_active_alias: str = "factory_knowledge_active"
+    optimizer_versioned_collection_prefix: str = "factory_knowledge_v"
+    # 獨立 Deployment / Optimizer SQLite（**不**混入正式 metadata.db）。
+    optimizer_db_path: str = "storage/optimizer.db"
+
+    # --- v1.1 Optimizer Read-only Reporting（Slice 8 §六 / §十四）---
+    # Read-only UI/API 讀取的 Search / Review / Deployment SQLite 路徑，**分開配置**（§六.8）。
+    # 預設 None：未配置即回傳 unavailable，且**永不建立** DB（§十四.2 / §十六.1）。
+    # 這些路徑僅供 read-only 開啟（mode=ro）；正式 Production retrieval 仍走 qdrant_collection。
+    optimizer_search_db_path: Optional[str] = None
+    optimizer_review_db_path: Optional[str] = None
+    optimizer_deployment_db_path: Optional[str] = None
 
     # --- LLM ---
     llm_base_url: str = ""

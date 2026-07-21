@@ -27,10 +27,19 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger, mask_hash
 from app.repositories.document_repository import DocumentRecord, DocumentRepository
+from app.services.canonical_builder import build_canonical_document
 from app.services.document_loader import load_document
 from app.services.embedding_service import EmbeddingService
 from app.services.text_splitter import TextSplitter
 from app.services.vector_store import VectorStore
+
+# 副檔名 → canonical document_type（offset scope 由此決定：pdf=page、其餘=document）。
+_DOCUMENT_TYPES = {
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".txt": "txt",
+    ".pdf": "pdf",
+}
 
 logger = get_logger("app.indexing")
 
@@ -125,12 +134,22 @@ class IndexingService:
             # 8. 使用現有 Loader 解析
             elements = load_document(filename, raw_bytes)
 
-            # 9. 使用現有 Splitter 切 Chunk
+            # 8b. 建立版本化 Canonical Document（v1.1 §五），供 Chunk provenance 對映。
+            #     切分邏輯不變；canonical 僅提供附加的可追蹤 offset / 版本 metadata。
+            canonical = build_canonical_document(
+                filename=filename,
+                document_sha256=file_hash,
+                document_type=_DOCUMENT_TYPES.get(ext, "txt"),
+                elements=elements,
+            )
+
+            # 9. 使用現有 Splitter 切 Chunk（附上 provenance / identifiers / 版本）
             chunks = self.splitter.split(
                 elements,
                 document_id=document_id,
                 filename=filename,
                 file_hash=file_hash,
+                canonical=canonical,
             )
             if not chunks:
                 raise EmptyDocumentError("文件解析後沒有可索引的內容。")

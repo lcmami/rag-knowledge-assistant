@@ -22,6 +22,30 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  # 可選的「一次性」Optimizer CLI（Slice 8 §十五）：
+  #   - 只在 `--profile cli` 時建立，**不**隨 `docker compose up` 啟動（不影響既有流程）。
+  #   - 無常駐 worker、無 Redis / broker；用完即止（`run --rm`）。
+  #   - 與 api 共用同一 image 與 app_storage volume，CLI 產出的 DB/報表落在持久化 storage，
+  #     再把三個 read-only 路徑設給 api 即可在 UI 展示。
+  # 範例：
+  #   docker compose --profile cli run --rm optimizer-cli \
+  #     python -m scripts.seed_optimizer_ui_demo --output-dir storage/optimizer-demo
+  #   docker compose --profile cli run --rm optimizer-cli \
+  #     python -m evaluation.v11.search.cli --help
+  optimizer-cli:
+    build: .
+    profiles: ["cli"]
+    depends_on:
+      - qdrant
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+      - app_storage:/app/storage
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - HF_HOME=/root/.cache/huggingface
+    entrypoint: []
+    command: ["python", "-c", "print('optimizer-cli：以 docker compose --profile cli run --rm optimizer-cli <command> 執行離線工具')"]
+
 volumes:
   qdrant_data:
   hf_cache:

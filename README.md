@@ -12,6 +12,182 @@ Citation 驗證，並提供一個純 Vanilla JS 的簡易前端。
 
 ---
 
+## v1.1 — Human-in-the-loop Retrieval Optimizer
+
+v1.1 在 v1.0 的 RAG 之上，加入一套**離線、人為把關**的檢索優化流程與其唯讀報表 UI。
+
+> **定位（誠實）**：這是「**Factory RAG Assistant + Human-in-the-loop Retrieval Optimizer**」，
+> **不是**全自主 Agent。優化器只**提案**；chunking／retrieval 設定的選擇、dataset 的擴充、
+> 以及任何實際部署，都需要**人工核准**。它不會自己決定最佳設定，也不會自動套用。
+
+### v1.1 Workflow
+
+```
+Tracked Corpus（受版控的示範語料）
+  → Canonical Evidence（正規化證據 + provenance）
+  → Isolated Trials（每個設定跑隔離的 evaluation run）
+  → Chunking／Retrieval Search（grid／random）
+  → Hard Constraints（安全門檻）
+  → Pareto（非支配前緣）
+  → Recommendation Lock（鎖定固定 candidate）
+  → Test（在 held-out test split 上驗收）
+  → Human Review（人工逐筆審 dataset 提案）
+  → Safe Apply／Rollback（typed confirmation + alias 切換，預設停用）
+```
+
+### Features
+
+- **Canonical Evidence**：gold label 綁原始文件證據 span（版本化正規化 + anchor）。
+- **Versioned Dataset**：v1.1 evaluation dataset（tune／validation／test 嚴格隔離、無 group leakage）。
+- **Trial Isolation**：每個 chunk／retrieval 設定跑自己的隔離 evaluation run 與 Qdrant collection。
+- **Metrics**：NDCG@5、MRR、Recall@1/3/5、exact-code Top-1、unanswerable FP、duplicate、P50/P95、
+  index build time、cache hit rate（可計算性與樣本粒度誠實揭露）。
+- **Chunk Strategies**：current／fixed／paragraph／heading（版本化搜尋空間）。
+- **Embedding Cache**：content-hash 持久化快取，同 chunk 文字跨 trial 重用。
+- **Identifier-aware Retrieval**：dense ∪ identifier-filtered、exact-match boost、confusable penalty。
+- **Grid／Random Search**、**Hard Constraints**、**Pareto**、**Recommendation Lock**。
+- **Human Review**：LLM 只提案，接受／發布須人工逐筆，編輯永遠產生新 revision。
+- **Safe Apply／Rollback**：logical alias 切換（永不改 `factory_knowledge`）、corpus/dataset hash guard、
+  typed confirmation、audit trail、idempotency——且**預設停用**。
+- **UI Reporting**：唯讀前端 Tab（Overview／Search／Review／Deployment）+ read-only API。
+
+### Honest Result（目前 demo recommendation）
+
+目前的 demo recommendation **不具備 apply 資格**，且我們刻意如實呈現，不美化：
+
+- Current demo recommendation is **not apply-eligible**.
+- The evaluation corpus is intentionally small.
+- Several validation candidates **tied on quality metrics**（8 個 feasible candidate 在品質指標上完全相同）。
+- Single-run latency was **not stable enough** to prove one configuration superior（選擇實為單次 P95 雜訊）。
+- The **E102 same-chunk multi-identifier ambiguity remains unresolved**（`eval-e102-001` 的 first relevant
+  rank 在 baseline 與 recommendation 皆為 2）。
+
+我們**不**宣稱：自動找到全域最佳 chunking、已適用真實工廠、已正式部署、目前 candidate 可直接
+apply、95% 準確率、或完整 Active Learning 已完成。
+
+### v1.1 Commands（皆不需提交 API key 即可測試 optimizer 核心）
+
+```bash
+# Slice 0 baseline（v1.0 retrieval baseline）
+python -m evaluation.evaluate_retrieval        # 註：會覆寫 evaluation/results.json，請自行 git checkout 還原
+
+# Trial Runner / Chunking / Identifier smoke（隔離 collection，需 Qdrant）
+python -m evaluation.v11.cli run    --config evaluation/configs/slice2-smoke.json
+python -m evaluation.v11.cli run    --config evaluation/configs/slice3-chunking-smoke.json
+python -m evaluation.v11.cli run    --config evaluation/configs/slice4-identifier-smoke.json
+
+# Optimizer Search（grid／random + constraints + Pareto + recommendation）
+python -m evaluation.v11.search.cli --config evaluation/configs/slice5-optimizer-smoke-v2.json
+
+# Human Review CLI（正式 dataset authoring 入口；LLM 只提案，接受須人工）
+python -m evaluation.v11.review.cli --help
+
+# Deployment Admin（預設停用；停用時 write endpoint 一律 403，不建構 service）
+#   啟用需明確設 OPTIMIZER_ADMIN_ENABLED=true，且 candidate 須 apply-eligible
+
+# UI Demo Seeder（產生清楚標示的 demo fixture；不碰真實資料 / Qdrant / LLM）
+python -m scripts.seed_optimizer_ui_demo --output-dir evaluation/demo
+
+# 測試
+python -m pytest tests/unit -q                                   # 全部 unit
+python -m pytest tests/integration -q -m "not llm_integration"   # 非 LLM 整合（需 Qdrant）
+```
+
+前端 E2E（可重現流程；`npm ci` 由 `package-lock.json` 鎖版，`test:e2e` 對應 `playwright test`）：
+
+```powershell
+npm ci
+npx playwright install chromium
+npm run test:e2e
+```
+
+啟動 API 後把 seeder 產生的三個路徑設給環境變數，即可在 UI 的 **Retrieval Optimizer** Tab 展示：
+
+```bash
+OPTIMIZER_SEARCH_DB_PATH=evaluation/demo/optimizer-demo.search.db
+OPTIMIZER_REVIEW_DB_PATH=evaluation/demo/optimizer-demo.review.db
+OPTIMIZER_DEPLOYMENT_DB_PATH=evaluation/demo/optimizer-demo.deployment.db
+```
+
+Docker 使用者可用**一次性** CLI profile（不新增常駐 worker、無 Redis／broker、不影響 `docker compose up`）：
+
+```bash
+docker compose --profile cli run --rm optimizer-cli \
+  python -m scripts.seed_optimizer_ui_demo --output-dir storage/optimizer-demo
+```
+
+### v1.1 Safety
+
+- **Production Admin disabled by default**（`OPTIMIZER_ADMIN_ENABLED=false`）；停用時 write endpoint 不建構、不呼叫任何 service。
+- **No automatic apply／rollback／alias init**——全部需人工 typed confirmation。
+- **Corpus hash guard + Dataset hash guard**——candidate 與目前 corpus／dataset 不符即拒絕。
+- **Typed confirmation**（`APPLY <alias> CONFIG <hash> FROM <current>` 等，後端重新驗證）。
+- **Alias switch, never rename／delete**——`factory_knowledge` 為硬編碼 protected collection，永不刪除。
+- **Rollback + Audit**——每次操作 append-only 稽核；idempotency key 防重複。
+- **Read-only reporting**——UI／read API 以 SQLite `mode=ro` 開啟，不建立、不遷移、不改資料，不輸出私人路徑。
+- **Demo fixture isolation**——demo 資料明確標示 `demo_fixture=true`，不偽造 apply 成功、不建立真實 alias。
+
+### v1.1 Architecture
+
+```mermaid
+flowchart LR
+    subgraph Offline[離線 · CLI / Optimizer（人為把關）]
+        CORPUS[Tracked Corpus] --> CANON[Canonical Evidence]
+        CANON --> TRIALS[Isolated Trials]
+        TRIALS --> SEARCH[Chunk/Retrieval Search]
+        SEARCH --> CONS[Hard Constraints] --> PARETO[Pareto] --> LOCK[Recommendation Lock]
+        LOCK --> TEST[Test Split 驗收]
+        REVIEW[Human Review CLI] --> DATASET[(Versioned Dataset)]
+    end
+
+    subgraph DBs[獨立 Read-only SQLite（分開配置）]
+        SDB[(Search DB)]
+        RDB[(Review DB)]
+        DDB[(Deployment DB)]
+    end
+
+    subgraph Online[線上 · FastAPI]
+        ROAPI["/api/optimizer/* (read-only)"]
+        ADMIN["/api/optimizer admin (預設停用)"]
+    end
+
+    subgraph UI[前端 Tab · Retrieval Optimizer]
+        OV[Overview] --- SR[Search Results]
+        HR[Human Review] --- DEP[Deployment]
+    end
+
+    TEST --> SDB
+    REVIEW --> RDB
+    ADMIN -. alias switch（人工核准後）.-> DDB
+    SDB & RDB & DDB --> ROAPI --> UI
+    ADMIN -. write（typed confirmation）.-> QDRANT[(Qdrant alias)]
+```
+
+### v1.1 Screenshots（demo fixture）
+
+<p align="center">
+  <img src="docs/screenshots/v1.1-optimizer-overview.png" alt="Optimizer Overview（demo）" width="420" />
+  <img src="docs/screenshots/v1.1-search-comparison.png" alt="Search Comparison + Per-case Diff（demo）" width="420" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/v1.1-human-review.png" alt="Human Review（demo）" width="420" />
+  <img src="docs/screenshots/v1.1-deployment-blocked.png" alt="Deployment — Apply blocked（demo）" width="420" />
+</p>
+
+> 截圖皆使用 demo fixture（畫面標示 Demo），不含私人路徑、API key 或文件全文；
+> 不表示任何 apply 已成功。
+
+### v1.1 Limitations
+
+- Small dataset；coverage gaps（validation 缺 identifier-bearing unanswerable）。
+- Latency noise：P95 hard constraint 低於本機量測雜訊底限，recommendation 實由單次 latency 決定。
+- Demo corpus only——綁受版控示範語料，非真實工廠語料。
+- No RBAC／login；single-machine local admin。
+- No background worker／queue（無 Redis／Celery）。
+- No sparse／BM25／hybrid／reranker；no full active sampling；**no production deployment**。
+
+---
+
 ## 架構
 
 ```mermaid
@@ -94,13 +270,20 @@ flowchart TD
 # 1. 建立 .env（可先複製範本；未設定 LLM 時檢索仍可用）
 Copy-Item .env.example .env
 
-# 2. 建置並啟動 FastAPI + Qdrant
+# 2.（可選）驗證 compose 檔語法，且**不**輸出展開後的設定
+docker compose config --quiet
+
+# 3. 建置並啟動 FastAPI + Qdrant
 docker compose up --build -d
 docker compose ps
 
-# 3. 開啟前端
+# 4. 開啟前端
 #   http://localhost:8000/
 ```
+
+> **安全**：Avoid publishing the output of `docker compose config` when a local
+> `.env` contains secrets, because Compose may print interpolated values.
+> Use `docker compose config --quiet` for validation.（`--quiet` 只回傳 exit code，不印出任何展開內容。）
 
 - `GET /health` → 200
 - `GET /ready` → 依賴就緒檢查（設定 LLM 後 `llm_config=ok`；未設定時 `llm_config=error` 並回 503，屬**預期行為**）。

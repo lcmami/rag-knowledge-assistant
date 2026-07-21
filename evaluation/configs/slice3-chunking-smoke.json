@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "run_name": "slice3-chunking-smoke",
+  "random_seed": 42,
+  "dataset_path": "evaluation/datasets/v1.1/cases.json",
+  "corpus_paths": [
+    "sample_docs",
+    "evaluation/fixtures"
+  ],
+  "fail_fast": false,
+  "retry_failed": false,
+  "retry_interrupted": true,
+  "keep_trial_collections": false,
+  "trials": [
+    {
+      "trial_name": "A-current-baseline",
+      "chunk_config": {
+        "strategy": "current"
+      },
+      "retrieval_config": {
+        "top_k": 5,
+        "score_threshold": 0.55,
+        "candidate_multiplier": 3,
+        "candidate_cap": 50
+      }
+    },
+    {
+      "trial_name": "B-current-threshold-variant",
+      "chunk_config": {
+        "strategy": "current"
+      },
+      "retrieval_config": {
+        "top_k": 5,
+        "score_threshold": 0.5,
+        "candidate_multiplier": 3,
+        "candidate_cap": 50
+      }
+    },
+    {
+      "trial_name": "C-paragraph",
+      "chunk_config": {
+        "strategy": "paragraph",
+        "target_chars": 500,
+        "overlap_chars": 80,
+        "max_tokens": 480
+      },
+      "retrieval_config": {
+        "top_k": 5,
+        "score_threshold": 0.55,
+        "candidate_multiplier": 3,
+        "candidate_cap": 50
+      }
+    },
+    {
+      "trial_name": "D-heading-prefix",
+      "chunk_config": {
+        "strategy": "heading",
+        "target_chars": 600,
+        "overlap_chars": 100,
+        "max_tokens": 480,
+        "prepend_section_title": true
+      },
+      "retrieval_config": {
+        "top_k": 5,
+        "score_threshold": 0.55,
+        "candidate_multiplier": 3,
+        "candidate_cap": 50
+      }
+    }
+  ]
+}

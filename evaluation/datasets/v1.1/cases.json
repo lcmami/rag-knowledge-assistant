@@ -1,0 +1,266 @@
+{
+  "schema_version": "1.1",
+  "dataset_version": "v1.1-slice1-0001",
+  "notes": [
+    "This v1.1 evaluation dataset is bound to the tracked demo corpus (sample_docs/ + evaluation/fixtures/). It is not automatically valid for an arbitrary live corpus. A future Apply (Slice 7) must reject when candidate corpus_hash != target active corpus_hash.",
+    "v1.1 Slice 1 版本化 dataset：Gold Label 綁原始文件 Evidence Span（document_sha256 + canonical_text_version + offset/section/page + anchor_text），不綁 chunk id。",
+    "offset 綁 canonical_text_version=v1 的 normalized canonical text；PDF 用 page-local offset，Markdown/TXT 用 document-global offset。",
+    "本檔含 12 個 case：其中 11 個由 Slice 0（共 15 題）遷移而來，另 1 個為 v1.1 新增合成案例。",
+    "已遷移（11，對照 Slice 0 case id）：C01=eval-e102-001、C02=eval-e102-002、C03=eval-e101-001、C04=eval-e203-001、C05=eval-e102-semantic、C06=eval-maint-cycle-001、C08=eval-mes-status-001、C09=eval-api-token-001、C11=eval-e102-confusable、C12=eval-unanswerable-price（unanswerable 售價）、C13=eval-unanswerable-capital（unanswerable 首都）。unanswerable case 依規則不需 expected evidence offset。",
+    "v1.1 新增合成案例（不屬 Slice 0 15 題）：eval-maint-comm-001（cross_section，CM-12 通訊模組檢查）。",
+    "尚未遷移（4，待 Slice 2+ 或人工精確標註）：C07 空氣過濾網清潔週期、C10 E102 與其他警報處理方式比較、C14 作業員月薪（unanswerable）、C15 股票收盤價（unanswerable）。不得為湊數虛構 evidence offset。",
+    "corpus 為 sample_docs/（作品集示範文件），與正式 factory_knowledge collection 之文件為不同來源；sha256 對應 sample_docs 檔案內容。"
+  ],
+  "cases": [
+    {
+      "id": "eval-e102-001",
+      "question": "設備出現 E102 警報時應如何處理？",
+      "query_type": "exact_code",
+      "answerable": true,
+      "group_id": "alarm-e102",
+      "split": "test",
+      "expected_evidence": [
+        {
+          "document_sha256": "042f36719ba2dcf433554ccfbe84349e54d22ea49158099229fe6586cd1247cc",
+          "filename": "equipment_alarm_manual.md",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": null,
+          "section": "E102 感測器通訊異常",
+          "offset_scope": "document",
+          "char_start": 167,
+          "char_end": 369,
+          "anchor_text": ["E102", "感測器", "通訊異常"]
+        }
+      ]
+    },
+    {
+      "id": "eval-e102-002",
+      "question": "E102 警報代表什麼？",
+      "query_type": "exact_code",
+      "answerable": true,
+      "group_id": "alarm-e102",
+      "split": "test",
+      "expected_evidence": [
+        {
+          "document_sha256": "042f36719ba2dcf433554ccfbe84349e54d22ea49158099229fe6586cd1247cc",
+          "filename": "equipment_alarm_manual.md",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": null,
+          "section": "E102 感測器通訊異常",
+          "offset_scope": "document",
+          "char_start": 181,
+          "char_end": 293,
+          "anchor_text": ["E102", "感測器"]
+        }
+      ]
+    },
+    {
+      "id": "eval-e102-semantic",
+      "question": "感測器無法與控制器正常通訊時應如何排除？",
+      "query_type": "semantic",
+      "answerable": true,
+      "group_id": "alarm-e102",
+      "split": "test",
+      "expected_evidence": [
+        {
+          "document_sha256": "042f36719ba2dcf433554ccfbe84349e54d22ea49158099229fe6586cd1247cc",
+          "filename": "equipment_alarm_manual.md",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": null,
+          "section": "E102 感測器通訊異常",
+          "offset_scope": "document",
+          "char_start": 295,
+          "char_end": 369,
+          "anchor_text": ["感測器", "通訊線"]
+        }
+      ]
+    },
+    {
+      "id": "eval-e102-confusable",
+      "question": "通訊模組指示燈閃紅燈時屬於哪一種警報，應如何處理？",
+      "query_type": "confusable",
+      "answerable": true,
+      "group_id": "alarm-e102",
+      "split": "test",
+      "expected_evidence": [
+        {
+          "document_sha256": "042f36719ba2dcf433554ccfbe84349e54d22ea49158099229fe6586cd1247cc",
+          "filename": "equipment_alarm_manual.md",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": null,
+          "section": "E102 感測器通訊異常",
+          "offset_scope": "document",
+          "char_start": 167,
+          "char_end": 369,
+          "anchor_text": ["E102", "通訊"]
+        },
+        {
+          "document_sha256": "042f36719ba2dcf433554ccfbe84349e54d22ea49158099229fe6586cd1247cc",
+          "filename": "equipment_alarm_manual.md",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": null,
+          "section": "警報代碼對照表",
+          "offset_scope": "document",
+          "char_start": 489,
+          "char_end": 626,
+          "anchor_text": ["E102", "代碼"]
+        }
+      ]
+    },
+    {
+      "id": "eval-e101-001",
+      "question": "設備顯示 E101 電源模組異常時，操作員應先確認什麼？",
+      "query_type": "exact_code",
+      "answerable": true,
+      "group_id": "alarm-e101",
+      "split": "tune",
+      "expected_evidence": [
+        {
+          "document_sha256": "042f36719ba2dcf433554ccfbe84349e54d22ea49158099229fe6586cd1247cc",
+          "filename": "equipment_alarm_manual.md",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": null,
+          "section": "E101 電源模組異常",
+          "offset_scope": "document",
+          "char_start": 45,
+          "char_end": 165,
+          "anchor_text": ["E101", "電源模組"]
+        }
+      ]
+    },
+    {
+      "id": "eval-e203-001",
+      "question": "E203 溫度過高警報的安全閾值是攝氏幾度？",
+      "query_type": "exact_code",
+      "answerable": true,
+      "group_id": "alarm-e203",
+      "split": "tune",
+      "expected_evidence": [
+        {
+          "document_sha256": "042f36719ba2dcf433554ccfbe84349e54d22ea49158099229fe6586cd1247cc",
+          "filename": "equipment_alarm_manual.md",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": null,
+          "section": "E203 溫度過高警報",
+          "offset_scope": "document",
+          "char_start": 371,
+          "char_end": 478,
+          "anchor_text": ["E203", "溫度過高"]
+        }
+      ]
+    },
+    {
+      "id": "eval-mes-status-001",
+      "question": "MES 工單如何從 WAITING 切換為 RUNNING？",
+      "query_type": "procedure",
+      "answerable": true,
+      "group_id": "mes-status",
+      "split": "validation",
+      "expected_evidence": [
+        {
+          "document_sha256": "8432bccf03a1c950ff3fa59a9e8b0810bfa549abcf6e6e4f39a4b4dd888ad9af",
+          "filename": "mes_operation_sop.md",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": null,
+          "section": "工單狀態流程",
+          "offset_scope": "document",
+          "char_start": 51,
+          "char_end": 292,
+          "anchor_text": ["WAITING", "RUNNING", "工單"]
+        }
+      ]
+    },
+    {
+      "id": "eval-api-token-001",
+      "question": "API Token 的有效時間是多久？",
+      "query_type": "semantic",
+      "answerable": true,
+      "group_id": "api-token",
+      "split": "validation",
+      "expected_evidence": [
+        {
+          "document_sha256": "680315276611bc0ddf51133a8a8bae91c051e8336134d506f01e45b9fcb81efa",
+          "filename": "api_integration_spec.md",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": null,
+          "section": "認證與 Token",
+          "offset_scope": "document",
+          "char_start": 50,
+          "char_end": 165,
+          "anchor_text": ["Token", "認證"]
+        }
+      ]
+    },
+    {
+      "id": "eval-maint-cycle-001",
+      "question": "CX-500 設備的基本保養每幾小時執行一次？",
+      "query_type": "semantic",
+      "answerable": true,
+      "group_id": "maint-cycle",
+      "split": "tune",
+      "expected_evidence": [
+        {
+          "document_sha256": "490ff764f373e3080021fe0594b43fa1889f68250435224c2f13332a7cd97174",
+          "filename": "equipment_maintenance_manual.pdf",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": 2,
+          "section": "定期保養週期",
+          "offset_scope": "page",
+          "char_start": 0,
+          "char_end": 174,
+          "anchor_text": ["CX-500", "保養", "500"]
+        }
+      ]
+    },
+    {
+      "id": "eval-maint-comm-001",
+      "question": "設備通訊模組故障時應優先檢查哪個模組？",
+      "query_type": "cross_section",
+      "answerable": true,
+      "group_id": "maint-comm",
+      "split": "tune",
+      "expected_evidence": [
+        {
+          "document_sha256": "490ff764f373e3080021fe0594b43fa1889f68250435224c2f13332a7cd97174",
+          "filename": "equipment_maintenance_manual.pdf",
+          "canonical_text_version": "v1",
+          "loader_version": "v1",
+          "page": 3,
+          "section": "通訊模組檢查",
+          "offset_scope": "page",
+          "char_start": 0,
+          "char_end": 119,
+          "anchor_text": ["CM-12", "通訊"]
+        }
+      ]
+    },
+    {
+      "id": "eval-unanswerable-price",
+      "question": "CX-500 的市場售價是多少？",
+      "query_type": "unanswerable",
+      "answerable": false,
+      "group_id": "unanswerable-price",
+      "split": "test",
+      "expected_evidence": []
+    },
+    {
+      "id": "eval-unanswerable-capital",
+      "question": "台灣的首都是哪一個城市？",
+      "query_type": "unanswerable",
+      "answerable": false,
+      "group_id": "unanswerable-general",
+      "split": "test",
+      "expected_evidence": []
+    }
+  ]
+}

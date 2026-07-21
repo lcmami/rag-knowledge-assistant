@@ -17,6 +17,32 @@ storage/uploads/
 *.sqlite
 *.sqlite3
 
+# v1.1 Optimizer 產物（Run Report / Optimizer DB / Embedding Cache / 暫存）不得入庫。
+# 注意：evaluation/configs/ 與 evaluation/datasets/ 為受追蹤資產，**不得**忽略（§二十四）。
+evaluation/runs/
+evaluation/cache/
+*.optimizer.db
+*.embedding-cache.db
+# Slice 5：Optimizer Search 產物（split dataset 副本 / optimizer-report.*）與測試暫存。
+evaluation/searches/
+evaluation/.pytest-tmp/
+# Slice 6：Review Session / Draft Dataset / Review Report / Review DB 不入庫（§二十一）。
+# 注意：evaluation/datasets/ 仍為受追蹤資產，不得忽略——只忽略 reviews/ 產物。
+evaluation/reviews/
+*.review.db
+# Slice 7：Deployment Report / Deployment DB / Deployment embedding cache 不入庫（§二十三）。
+# 注意：evaluation/datasets/ 與 evaluation/configs/ 仍為受追蹤資產，不得忽略。
+evaluation/deployments/
+*.deployment.db
+# Slice 8：UI Demo Fixture DB（seeder 產物）不入庫（§十三.14）。
+# 注意：seeder 程式與 deterministic fixture 定義（evaluation/v11/reporting/）仍受追蹤。
+evaluation/demo/
+*.search.db
+# Slice 8：Playwright / Node 前端測試工具產物（package.json / config / spec 仍受追蹤）。
+node_modules/
+playwright-report/
+test-results/
+
 # 向量資料庫本地儲存（若以本地目錄掛載時）
 qdrant_storage/
 
