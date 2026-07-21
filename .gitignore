@@ -34,6 +34,14 @@ evaluation/reviews/
 # 注意：evaluation/datasets/ 與 evaluation/configs/ 仍為受追蹤資產，不得忽略。
 evaluation/deployments/
 *.deployment.db
+# Slice 8：UI Demo Fixture DB（seeder 產物）不入庫（§十三.14）。
+# 注意：seeder 程式與 deterministic fixture 定義（evaluation/v11/reporting/）仍受追蹤。
+evaluation/demo/
+*.search.db
+# Slice 8：Playwright / Node 前端測試工具產物（package.json / config / spec 仍受追蹤）。
+node_modules/
+playwright-report/
+test-results/
 
 # 向量資料庫本地儲存（若以本地目錄掛載時）
 qdrant_storage/

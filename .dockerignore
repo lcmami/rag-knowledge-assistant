@@ -1,0 +1,32 @@
+# 不把本機開發／測試產物與相依放進 build context / image。
+.venv/
+node_modules/
+.git/
+.pytest_cache/
+**/__pycache__/
+*.pyc
+
+# v1.1 Optimizer 本機產物（DB / report / demo fixture）——絕不進 image。
+evaluation/runs/
+evaluation/searches/
+evaluation/reviews/
+evaluation/deployments/
+evaluation/demo/
+evaluation/cache/
+evaluation/.pytest-tmp/
+*.optimizer.db
+*.search.db
+*.review.db
+*.deployment.db
+*.embedding-cache.db
+
+# 測試 / 前端測試工具
+tests/
+playwright.config.ts
+package.json
+package-lock.json
+playwright-report/
+test-results/
+
+# 環境檔（絕不進 image）
+.env

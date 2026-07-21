@@ -1,0 +1,13 @@
+{
+  "name": "factory-rag-assistant-e2e",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Playwright E2E + DOM tests for the Retrieval Optimizer UI (Slice 8). Python app is the product; this is test-only tooling.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

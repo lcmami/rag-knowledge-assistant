@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,6 +59,14 @@ class Settings(BaseSettings):
     optimizer_versioned_collection_prefix: str = "factory_knowledge_v"
     # 獨立 Deployment / Optimizer SQLite（**不**混入正式 metadata.db）。
     optimizer_db_path: str = "storage/optimizer.db"
+
+    # --- v1.1 Optimizer Read-only Reporting（Slice 8 §六 / §十四）---
+    # Read-only UI/API 讀取的 Search / Review / Deployment SQLite 路徑，**分開配置**（§六.8）。
+    # 預設 None：未配置即回傳 unavailable，且**永不建立** DB（§十四.2 / §十六.1）。
+    # 這些路徑僅供 read-only 開啟（mode=ro）；正式 Production retrieval 仍走 qdrant_collection。
+    optimizer_search_db_path: Optional[str] = None
+    optimizer_review_db_path: Optional[str] = None
+    optimizer_deployment_db_path: Optional[str] = None
 
     # --- LLM ---
     llm_base_url: str = ""

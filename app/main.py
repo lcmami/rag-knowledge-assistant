@@ -9,7 +9,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import documents, health, optimizer_admin, query, retrieve
+from app.api import (
+    documents,
+    health,
+    optimizer_admin,
+    optimizer_reporting,
+    query,
+    retrieve,
+)
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.core.logging import configure_logging, get_logger
@@ -78,6 +85,8 @@ def create_app() -> FastAPI:
     app.include_router(query.router)
     # v1.1 Optimizer Admin（Slice 7）：Admin Write API 預設停用；讀取端點回傳一律去識別化。
     app.include_router(optimizer_admin.router)
+    # v1.1 Optimizer Reporting（Slice 8）：read-only 報表 API；不建立 DB、不碰 Qdrant / LLM。
+    app.include_router(optimizer_reporting.router)
 
     # 簡易前端：Vanilla JS，靜態資源掛在 /static，首頁回傳 index.html。
     # API 路由先註冊、先比對，因此不會被靜態掛載遮蔽。

@@ -12,6 +12,10 @@ RUN pip install --no-cache-dir .
 
 COPY app ./app
 COPY sample_docs ./sample_docs
+# v1.1 Optimizer 引擎 + demo seeder（供可選的一次性 optimizer-cli profile 使用；
+# 不新增常駐 worker。API 服務預設不執行任何 optimizer search）。
+COPY evaluation ./evaluation
+COPY scripts ./scripts
 
 EXPOSE 8000
 
