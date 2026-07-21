@@ -15,6 +15,13 @@ import os
 
 import pytest
 
+from tests.integration.conftest import (
+    drop_collections,
+    list_collections,
+    prod_point_count,
+    unique_token,
+)
+
 pytestmark = pytest.mark.integration
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,18 +45,6 @@ def qdrant_url(monkeypatch):
     return url
 
 
-def _prod_snapshot(url):
-    from qdrant_client import QdrantClient
-
-    c = QdrantClient(url=url)
-    try:
-        names = sorted(x.name for x in c.get_collections().collections)
-        prod_points = c.count(PROD_COLLECTION).count if PROD_COLLECTION in names else None
-        return names, prod_points
-    finally:
-        c.close()
-
-
 def test_trial_runner_end_to_end(qdrant_url, tmp_path):
     from evaluation.v11 import trial_runner
     from evaluation.v11.optimizer_repository import OptimizerRepository
@@ -57,7 +52,10 @@ def test_trial_runner_end_to_end(qdrant_url, tmp_path):
     from evaluation.v11.run_models import RunConfig, RunStatus, TrialStatus
     import json
 
-    before_names, before_prod = _prod_snapshot(qdrant_url)
+    from qdrant_client import QdrantClient
+
+    client = QdrantClient(url=qdrant_url)
+    before_prod = prod_point_count(client)
 
     with open(CONFIG_PATH, encoding="utf-8") as f:
         run_config = RunConfig.from_raw(json.load(f))
@@ -66,16 +64,23 @@ def test_trial_runner_end_to_end(qdrant_url, tmp_path):
     output_dir = str(tmp_path / "runs")
     workdir = str(tmp_path / "work")
     provider = RealTrialServiceProvider.create(qdrant_url, workdir)
+    # 唯一 run_id → 唯一 trial collection，不沿用前次中斷執行的殘留。
+    run_id = f"itg-run-{unique_token()}"
+    own_collections: list[str] = []
     try:
         result = trial_runner.execute_run(
-            run_config, repo, provider, output_dir=output_dir, run_id="itg-run-1"
+            run_config, repo, provider, output_dir=output_dir, run_id=run_id
         )
+        own_collections = [x.collection_name for x in repo.list_trials(run_id)]
+        # 在 safety-net cleanup 之前記錄 runner 是否已自行清乾淨。
+        leftover_after_run = [n for n in own_collections if client.collection_exists(n)]
     finally:
         provider.close()
+        drop_collections(client, own_collections)  # safety net
 
     # Run / Trial 完成
     assert result.run.status == RunStatus.COMPLETED
-    trials = repo.list_trials("itg-run-1")
+    trials = repo.list_trials(run_id)
     assert len(trials) == 1
     t = trials[0]
     assert t.status == TrialStatus.COMPLETED
@@ -102,15 +107,15 @@ def test_trial_runner_end_to_end(qdrant_url, tmp_path):
     assert os.path.exists(result.report_json_path)
     assert os.path.exists(result.report_markdown_path)
 
-    # Trial collection 最後清理，無殘留
-    after_names, after_prod = _prod_snapshot(qdrant_url)
-    assert not any(n.startswith("optimizer_") for n in after_names), "殘留 optimizer_ collection"
-    assert t.collection_name not in after_names
+    # 本 Run 的 Trial collection 最後清理，無殘留。
+    # 只檢查本測試自身建立的 collection，不斷言整個 Qdrant namespace。
+    assert leftover_after_run == [], f"runner 未清除自身 collection：{leftover_after_run}"
     assert result.remaining_collections == []
 
     # factory_knowledge 前後快照一致（不觸碰正式資料）
-    assert after_prod == before_prod
-    assert set(before_names) == set(after_names)
+    assert prod_point_count(client) == before_prod
+    assert PROD_COLLECTION in list_collections(client)
+    client.close()
 
 
 def run_config_cases(run_config):

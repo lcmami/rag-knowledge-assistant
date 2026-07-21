@@ -19,6 +19,13 @@ import os
 
 import pytest
 
+from tests.integration.conftest import (
+    drop_collections,
+    list_collections,
+    prod_point_count,
+    unique_token,
+)
+
 pytestmark = pytest.mark.integration
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -41,18 +48,6 @@ def qdrant_url(monkeypatch):
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"真實 Qdrant 未就緒（{url}）：{exc}")
     return url
-
-
-def _prod_snapshot(url):
-    from qdrant_client import QdrantClient
-
-    c = QdrantClient(url=url)
-    try:
-        names = sorted(x.name for x in c.get_collections().collections)
-        prod_points = c.count(PROD_COLLECTION).count if PROD_COLLECTION in names else None
-        return names, prod_points
-    finally:
-        c.close()
 
 
 def _trial_config(name, retrieval):
@@ -87,7 +82,10 @@ def test_identifier_aware_union_boost_penalty(qdrant_url, tmp_path):
     from evaluation.v11 import hashing
     from evaluation.v11.real_services import RealTrialServiceProvider
 
-    before = _prod_snapshot(qdrant_url)
+    from qdrant_client import QdrantClient as _QC
+
+    probe = _QC(url=qdrant_url)
+    before_prod = prod_point_count(probe)
 
     files = [
         (os.path.basename(rel), abs_path)
@@ -96,7 +94,7 @@ def test_identifier_aware_union_boost_penalty(qdrant_url, tmp_path):
     workdir = str(tmp_path / "work")
     cache_db = str(tmp_path / "s4.embedding-cache.db")
     provider = RealTrialServiceProvider.create(qdrant_url, workdir, cache_db_path=cache_db)
-    collection = "optimizer_s4itg_direct"
+    collection = f"optimizer_s4itg_direct_{unique_token()}"
     try:
         build_tc = _trial_config("build", DENSE)
         provider.build_index(collection, build_tc, files)
@@ -174,11 +172,13 @@ def test_identifier_aware_union_boost_penalty(qdrant_url, tmp_path):
         except Exception:  # noqa: BLE001
             pass
         provider.close()
+        drop_collections(probe, [collection])  # safety net + 確認真的消失
 
-    # collection 清理、正式資料不變。
-    after = _prod_snapshot(qdrant_url)
-    assert not any(n.startswith("optimizer_") for n in after[0])
-    assert after == before
+    # 本測試自身 collection 已清理、正式資料不變（不斷言整個 namespace）。
+    assert not probe.collection_exists(collection)
+    assert prod_point_count(probe) == before_prod
+    assert PROD_COLLECTION in list_collections(probe)
+    probe.close()
 
 
 def test_slice4_smoke_end_to_end(qdrant_url, tmp_path):
@@ -187,7 +187,10 @@ def test_slice4_smoke_end_to_end(qdrant_url, tmp_path):
     from evaluation.v11.real_services import RealTrialServiceProvider
     from evaluation.v11.run_models import RunConfig, RunStatus, TrialStatus
 
-    before_names, before_prod = _prod_snapshot(qdrant_url)
+    from qdrant_client import QdrantClient
+
+    client = QdrantClient(url=qdrant_url)
+    before_prod = prod_point_count(client)
 
     with open(CONFIG_PATH, encoding="utf-8") as f:
         run_config = RunConfig.from_raw(json.load(f))
@@ -196,15 +199,22 @@ def test_slice4_smoke_end_to_end(qdrant_url, tmp_path):
     provider = RealTrialServiceProvider.create(
         qdrant_url, str(tmp_path / "work"), cache_db_path=str(tmp_path / "s4.embedding-cache.db")
     )
+    # 唯一 run_id → 唯一 trial collection。
+    run_id = f"s4-itg-{unique_token()}"
+    own_collections: list[str] = []
     try:
         result = trial_runner.execute_run(
-            run_config, repo, provider, output_dir=str(tmp_path / "runs"), run_id="s4-itg-1"
+            run_config, repo, provider, output_dir=str(tmp_path / "runs"), run_id=run_id
         )
+        own_collections = [x.collection_name for x in repo.list_trials(run_id)]
+        # 在 safety-net cleanup 之前記錄 runner 是否已自行清乾淨。
+        leftover_after_run = [n for n in own_collections if client.collection_exists(n)]
     finally:
         provider.close()
+        drop_collections(client, own_collections)  # safety net
 
     assert result.run.status == RunStatus.COMPLETED
-    trials = {t.trial_name: t for t in repo.list_trials("s4-itg-1")}
+    trials = {t.trial_name: t for t in repo.list_trials(run_id)}
     assert set(trials) == {"A-dense-baseline", "B-identifier-aware"}
     for t in trials.values():
         assert t.status == TrialStatus.COMPLETED
@@ -227,9 +237,9 @@ def test_slice4_smoke_end_to_end(qdrant_url, tmp_path):
     assert metas and all(m["strategy_name"] == "identifier_aware" for m in metas)
     assert any(m["query_identifiers"] for m in metas)  # 至少一題抽出 identifier
 
-    # collection 全清理；正式 factory_knowledge 前後一致。
-    after_names, after_prod = _prod_snapshot(qdrant_url)
-    assert not any(n.startswith("optimizer_") for n in after_names)
+    # 本 Run 的 collection 全清理；正式 factory_knowledge 前後一致。
+    assert leftover_after_run == [], f"runner 未清除自身 collection：{leftover_after_run}"
     assert result.remaining_collections == []
-    assert after_prod == before_prod
-    assert set(before_names) == set(after_names)
+    assert prod_point_count(client) == before_prod
+    assert PROD_COLLECTION in list_collections(client)
+    client.close()

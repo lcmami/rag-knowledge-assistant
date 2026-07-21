@@ -205,10 +205,15 @@ def test_embedding_cache_reused_across_candidates(search_result):
 def test_all_trial_collections_cleaned_up(search_result):
     result, _, url, before_names, _ = search_result
     after_names, _ = _prod_snapshot(url)
-    leftovers = [n for n in after_names if n.startswith("optimizer_")]
+    # 只檢查「本次 search 新建立」的 collection 是否清乾淨；不斷言整個 Qdrant
+    # namespace，否則任何無關殘留都會讓本測試間歇性失敗。
+    leftovers = [
+        n for n in after_names
+        if n.startswith("optimizer_") and n not in set(before_names)
+    ]
     assert leftovers == [], f"殘留 optimizer collection：{leftovers}"
     assert result.remaining_collections == []
-    assert set(after_names) == set(before_names)
+    assert set(after_names) - set(before_names) == set(), "本測試新增了未清理的 collection"
 
 
 def test_production_collection_untouched(search_result):
@@ -426,7 +431,10 @@ def test_v2_report_discloses_sample_granularity_and_identifier_gap(v2_result):
 def test_v2_collections_cleaned_and_production_untouched(v2_result):
     result, _, url, before_names, before_points = v2_result
     after_names, after_points = _prod_snapshot(url)
-    assert [n for n in after_names if n.startswith("optimizer_")] == []
+    assert [
+        n for n in after_names
+        if n.startswith("optimizer_") and n not in set(before_names)
+    ] == []
     assert result.remaining_collections == []
-    assert set(after_names) == set(before_names)
+    assert set(after_names) - set(before_names) == set()
     assert after_points == before_points
