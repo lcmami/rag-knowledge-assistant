@@ -47,6 +47,17 @@ class Settings(BaseSettings):
     # 保留環境變數覆寫能力；Evaluation Script 仍可明確指定 0.0 進行原始分數分析。
     retrieval_score_threshold: float = 0.55
 
+    # --- v1.1 Optimizer Admin（Slice 7 §六 / §二十）---
+    # Admin Write API 預設**停用**；停用時 write endpoint 不得執行任何 service（§二十.1/.2）。
+    optimizer_admin_enabled: bool = False
+    # Logical Alias 與 versioned physical collection 前綴（正式概念，§六 / §七）。
+    # 未初始化前 Production 仍直接使用既有 qdrant_collection（factory_knowledge），
+    # 本 Slice 不自動建立此 alias。
+    optimizer_active_alias: str = "factory_knowledge_active"
+    optimizer_versioned_collection_prefix: str = "factory_knowledge_v"
+    # 獨立 Deployment / Optimizer SQLite（**不**混入正式 metadata.db）。
+    optimizer_db_path: str = "storage/optimizer.db"
+
     # --- LLM ---
     llm_base_url: str = ""
     llm_api_key: str = ""

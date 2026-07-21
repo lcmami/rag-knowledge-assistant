@@ -30,6 +30,10 @@ evaluation/.pytest-tmp/
 # 注意：evaluation/datasets/ 仍為受追蹤資產，不得忽略——只忽略 reviews/ 產物。
 evaluation/reviews/
 *.review.db
+# Slice 7：Deployment Report / Deployment DB / Deployment embedding cache 不入庫（§二十三）。
+# 注意：evaluation/datasets/ 與 evaluation/configs/ 仍為受追蹤資產，不得忽略。
+evaluation/deployments/
+*.deployment.db
 
 # 向量資料庫本地儲存（若以本地目錄掛載時）
 qdrant_storage/
