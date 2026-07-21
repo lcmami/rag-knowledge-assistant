@@ -62,6 +62,25 @@
       "以下為展示用資料，非真實 production run。</div>";
   };
 
+  // Known limitations 區塊：通用地渲染 Search Detail API 的 outcome.known_limitations
+  // （§一）。不針對任何特定 case 硬編碼；缺失／空陣列時顯示 Empty State，不 crash；
+  // 文字完整可見（非 tooltip），並以 role="note" 標示語意。
+  UI.renderKnownLimitations = function (limitations) {
+    const items = (Array.isArray(limitations) ? limitations : [])
+      .filter(function (x) { return x != null && String(x).trim() !== ""; })
+      .map(function (x) { return String(x); });
+    let body;
+    if (!items.length) {
+      body = '<p class="opt-muted" data-testid="known-limitations-empty">' +
+        "此 search 未記錄任何 known limitation。</p>";
+    } else {
+      body = '<ul class="opt-limitations-list">' +
+        items.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>";
+    }
+    return '<div class="opt-card opt-limitations" role="note" aria-label="Known limitations"' +
+      ' data-testid="known-limitations"><h3>Known limitations</h3>' + body + "</div>";
+  };
+
   UI.renderOverview = function (data) {
     const s = data.search || {};
     const r = data.review || {};
@@ -471,17 +490,23 @@
     }
     const sid = searches[0].search_id;
     state.searchId = sid;
-    const [cands, cmp] = await Promise.all([
+    const [detail, cands, cmp] = await Promise.all([
+      fetchJson("/api/optimizer/searches/" + encodeURIComponent(sid)),
       fetchJson("/api/optimizer/searches/" + encodeURIComponent(sid) + "/candidates"),
       fetchJson("/api/optimizer/searches/" + encodeURIComponent(sid) + "/comparison"),
     ]);
     const cmpBody = (cmp.body && cmp.body.comparison) || null;
+    // Known limitations 取自 Search Detail API 的 outcome（唯讀，不在前端重述實驗結論）。
+    const searchDetail = (detail.body && detail.body.search) || null;
+    const knownLimitations = (searchDetail && searchDetail.outcome &&
+      searchDetail.outcome.known_limitations) || [];
     let html = "";
     html += UI.demoBanner(state.overview && state.overview.is_demo_fixture);
     if (cmpBody && cmpBody.baseline_comparison_status) {
       html += '<div class="opt-note opt-muted">Selection basis / latency 穩定性請見 Overview；' +
         "品質平手時單次 P95 winner 不代表品質最佳。</div>";
     }
+    html += UI.renderKnownLimitations(knownLimitations);
     html += '<div class="opt-card"><h3>Candidate Table</h3>' +
       UI.renderCandidateTable((cands.body && cands.body.candidates) || []) + "</div>";
     html += '<div class="opt-card"><h3>Metrics Comparison（Baseline vs Recommendation）</h3>' +

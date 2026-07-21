@@ -91,7 +91,14 @@ python -m scripts.seed_optimizer_ui_demo --output-dir evaluation/demo
 # 測試
 python -m pytest tests/unit -q                                   # 全部 unit
 python -m pytest tests/integration -q -m "not llm_integration"   # 非 LLM 整合（需 Qdrant）
-npm install && npx playwright install chromium && npx playwright test   # 前端 E2E
+```
+
+前端 E2E（可重現流程；`npm ci` 由 `package-lock.json` 鎖版，`test:e2e` 對應 `playwright test`）：
+
+```powershell
+npm ci
+npx playwright install chromium
+npm run test:e2e
 ```
 
 啟動 API 後把 seeder 產生的三個路徑設給環境變數，即可在 UI 的 **Retrieval Optimizer** Tab 展示：
@@ -263,13 +270,20 @@ flowchart TD
 # 1. 建立 .env（可先複製範本；未設定 LLM 時檢索仍可用）
 Copy-Item .env.example .env
 
-# 2. 建置並啟動 FastAPI + Qdrant
+# 2.（可選）驗證 compose 檔語法，且**不**輸出展開後的設定
+docker compose config --quiet
+
+# 3. 建置並啟動 FastAPI + Qdrant
 docker compose up --build -d
 docker compose ps
 
-# 3. 開啟前端
+# 4. 開啟前端
 #   http://localhost:8000/
 ```
+
+> **安全**：Avoid publishing the output of `docker compose config` when a local
+> `.env` contains secrets, because Compose may print interpolated values.
+> Use `docker compose config --quiet` for validation.（`--quiet` 只回傳 exit code，不印出任何展開內容。）
 
 - `GET /health` → 200
 - `GET /ready` → 依賴就緒檢查（設定 LLM 後 `llm_config=ok`；未設定時 `llm_config=error` 並回 503，屬**預期行為**）。

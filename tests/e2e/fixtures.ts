@@ -70,6 +70,34 @@ export function candidates() {
   };
 }
 
+export function searchDetail(over: any = {}) {
+  // 對應 /api/optimizer/searches/{id}（read-only detail）；outcome 內含 known_limitations，
+  // UI 由此通用渲染 Known limitations 區塊（§一），未在前端硬編碼實驗結論。
+  return {
+    configured: true, available: true, reason: null, found: true,
+    search: {
+      search_id: "search-demo", search_name: "DEMO optimizer search (fixture)",
+      status: "test_constraint_failed", dataset_version: "v1.1-coverage-0002",
+      recommendation_locked: true, apply_eligible: false,
+      test_constraint_status: "failed", baseline_comparison_status: "improved",
+      outcome: {
+        test_constraint_status: "failed",
+        baseline_comparison_status: "improved",
+        recommendation_apply_eligible: false,
+        apply_ineligible_reasons: [
+          "small_validation_sample", "quality_metrics_tied",
+          "selection_driven_by_single_run_latency", "test_constraint_failed", "demo_corpus_only",
+        ],
+        known_limitations: [
+          "First relevant rank for eval-e102-001 remains 2.",
+          "Same-chunk multi-identifier ambiguity remains unresolved.",
+        ],
+      },
+    },
+    ...over,
+  };
+}
+
 export function comparison() {
   return {
     configured: true, available: true, reason: null, found: true,
@@ -163,6 +191,9 @@ export async function installRoutes(page: Page, overrides: Record<string, any> =
     json(r, overrides.overview ?? demoOverview()));
   await page.route("**/api/optimizer/searches", (r) =>
     json(r, overrides.searches ?? searchesList()));
+  // Search detail（單一 id，無後續 path segment）——用 regex 避免與 /candidates、/comparison 混淆。
+  await page.route(/\/api\/optimizer\/searches\/[^/?#]+$/, (r) =>
+    json(r, overrides.searchDetail ?? searchDetail()));
   await page.route("**/api/optimizer/searches/*/candidates", (r) =>
     json(r, overrides.candidates ?? candidates()));
   await page.route("**/api/optimizer/searches/*/comparison", (r) =>

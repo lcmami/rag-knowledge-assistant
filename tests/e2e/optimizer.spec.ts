@@ -47,6 +47,43 @@ test.describe("Retrieval Optimizer UI", () => {
     // C01 誠實：first relevant rank 保持 2 → verdict same
     await expect(sp.getByText(/baseline FRR 2 → candidate FRR 2/)).toBeVisible();
     await expect(sp.locator(".opt-case-head").getByText("same")).toBeVisible();
+    // Known limitations 由 Search Detail API 通用渲染，完整句子可見（非 tooltip）。
+    const note = sp.locator('[data-testid="known-limitations"]');
+    await expect(note).toHaveAttribute("role", "note");
+    await expect(note.getByRole("heading", { name: "Known limitations" })).toBeVisible();
+    await expect(note.getByText("Same-chunk multi-identifier ambiguity remains unresolved.")).toBeVisible();
+    await expect(note.getByText("First relevant rank for eval-e102-001 remains 2.")).toBeVisible();
+  });
+
+  // 16.7 Known limitations empty state：缺失 / 空陣列不得 crash，仍顯示 role=note 區塊與 Empty State
+  test("16.7 known limitations: full sentence on search page; empty/missing renders safe empty state", async ({ page }) => {
+    // (a) 正常情況：完整限制句在 Search 頁可見，且 C01 仍為 2 → 2 / same
+    await F.installRoutes(page);
+    await F.openOptimizer(page);
+    await page.click('.subtab[data-sub="search"]');
+    const sp = page.locator("#opt-subpanel-search");
+    await expect(
+      sp.getByText("Same-chunk multi-identifier ambiguity remains unresolved.")
+    ).toBeVisible();
+    await expect(sp.getByText(/baseline FRR 2 → candidate FRR 2/)).toBeVisible();
+    await expect(sp.locator(".opt-case-head").getByText("same")).toBeVisible();
+
+    // (b) 純函式契約：空陣列 / undefined 皆回傳含 role="note" 的安全 Empty State，不丟例外
+    const results = await page.evaluate(() => {
+      const UI = (window as any).OptimizerUI;
+      return {
+        empty: UI.renderKnownLimitations([]),
+        missing: UI.renderKnownLimitations(undefined),
+        nulls: UI.renderKnownLimitations([null, "", "  "]),
+        populated: UI.renderKnownLimitations(["Same-chunk multi-identifier ambiguity remains unresolved."]),
+      };
+    });
+    expect(results.empty).toContain('role="note"');
+    expect(results.empty).toContain("known-limitations-empty");
+    expect(results.missing).toContain("known-limitations-empty");
+    expect(results.nulls).toContain("known-limitations-empty");
+    expect(results.populated).toContain("Same-chunk multi-identifier ambiguity remains unresolved.");
+    expect(results.populated).not.toContain("known-limitations-empty");
   });
 
   // 16.4 Human review

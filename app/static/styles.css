@@ -244,6 +244,11 @@ td.empty { text-align: center; color: var(--muted); }
 .opt-reasons ul { margin: 6px 0 0; padding-left: 20px; }
 .opt-reasons li { font-size: 0.86rem; margin-bottom: 2px; }
 
+/* Known limitations：清楚標示、文字完整可見（非 tooltip）。 */
+.opt-limitations { border-left: 4px solid var(--warn-border); }
+.opt-limitations-list { margin: 6px 0 0; padding-left: 20px; }
+.opt-limitations-list li { font-size: 0.9rem; margin-bottom: 4px; }
+
 .badge {
   display: inline-block; padding: 1px 8px; border-radius: 999px;
   font-size: 0.76rem; font-weight: 600; white-space: nowrap;
