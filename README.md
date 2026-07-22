@@ -6,6 +6,10 @@ LLM 問答、來源引用（Citation）與拒答機制。
 支援 Markdown / TXT / PDF 文件上傳、本地中文 Embedding、Qdrant 向量檢索、雙層拒答與
 Citation 驗證，並提供一個純 Vanilla JS 的簡易前端。
 
+v1.1 在此之上新增一套 LLM-assisted、human-in-the-loop 的檢索評估與最佳化 Agent。
+LLM 協助閱讀指定文件片段、提出評估問題與證據候選，再由人工審核、版本化評估資料集、
+隔離檢索試驗與評估指標形成閉環，用來降低建立與維護 RAG 評估資料所需的人力成本。
+
 > **LLM 狀態**：LLM 呼叫層（OpenAI-compatible Chat Completions）已完成，並已以外部 Provider
 > 完成一次端到端驗證（見 [端到端驗證結果](#端到端驗證結果)）。未設定 LLM 時，`/api/query` 會
 > 回傳 `503 LLM_NOT_CONFIGURED`，文件管理與向量檢索（`/api/retrieve`）仍可正常使用。
@@ -14,58 +18,114 @@ Citation 驗證，並提供一個純 Vanilla JS 的簡易前端。
 
 ## v1.1 — Human-in-the-loop Retrieval Optimizer
 
-v1.1 在原有的 RAG 文件問答之上，新增一套離線的檢索評估與調校流程。系統可比較不同的
-文件切分（chunking）與檢索（retrieval）設定，透過硬性限制條件與 Pareto frontier 產生
-候選設定（candidate），並提供人工審核、版本化評估資料集、報表介面，以及帶防護的
-套用（apply）與回滾（rollback）機制。
+**LLM-assisted retrieval evaluation and optimization agent** — 由 LLM 協助建立評估
+資料，並以隔離檢索試驗與人工審核形成閉環的最佳化 Agent。
 
-搜尋在離線、隔離的 trial 中進行，產生的是候選設定而非直接生效的變更；套用功能預設停用，
-需人工確認後才會動作。評估資料集與其證據可版本化，報表 UI 主要用於檢視結果。系統不包含
-自主決策或自動部署機制。
+### 為什麼需要它
+
+RAG 評估的成本通常不在執行 benchmark，而在建立與維護評估資料集本身。要得到一組
+可信的評估案例，往往需要領域人員、工程師或外包廠商反覆：
+
+```
+閱讀大量文件
+  → 找出值得測試的知識點
+  → 設計可回答、不可回答與易混淆案例
+  → 綁定正確的文件證據
+  → 執行檢索測試
+  → 依失敗案例再回頭補充資料
+```
+
+v1.1 讓 LLM 承擔其中大量的閱讀與出題工作：它閱讀指定的文件片段，提出評估問題與
+Answerability、Query Type、Evidence Anchor 等候選，交由人工集中審核；通過的候選發布為
+版本化資料集，再進入隔離檢索試驗與指標分析。整個過程降低從零建立評估案例的人力成本，
+但每一輪生成、審核、發布與最佳化仍由使用者明確啟動——系統提供形成迭代閉環所需的元件與
+工作流程，而不是在背景中持續自動運行。
+
+### Agent 組成
+
+這個 Agent 不依賴 MCP；LLM Candidate Generator、Python CLI、Qdrant、Evaluator 與
+Deployment Service 都是同一個受控工作流程中的元件。
+
+- **LLM**：閱讀指定文件片段，提出評估問題候選，並給出 Answerability、Query Type 與
+  Evidence Anchor 等建議。它只提案，不宣稱證據已驗證，也不產生字元 offset。
+- **Retrieval Optimizer**：在隔離 trial 中比較文件切分與檢索設定，計算 retrieval
+  metrics，套用 hard constraints，建立 Pareto frontier，並鎖定 recommendation。
+- **Human Review**：檢查問題是否合理、確認 answerability、確認原始文件證據、編輯或拒絕
+  候選、發布新版資料集，並核准高風險部署操作。
+- **Deployment Guard**：以 hash guard、typed confirmation、idempotency、append-only
+  audit trail 與 Qdrant alias 切換，控制 apply／rollback。
 
 ### 主要功能
 
+- **LLM-assisted Candidate Generation**：讀取指定文件片段，產生評估問題並附上 `query_type`、
+  `answerable_suggestion`、`anchor_text_suggestions`、`group_id_suggestion` 與 `rationale`
+  等候選欄位，供人工逐筆審核。所有候選一律以 `proposed` 狀態落庫，不會自動成為評估案例。
+- **Human Review（人工審核）**：候選必須經人工檢查、編輯、證據確認與接受後，才能發布為新版
+  評估資料集；每次編輯、加證據或接受都會產生新的、遞增的 revision，不覆寫歷史。
 - **Canonical Evidence（標準證據）**：將評估答案連結到原始文件中版本化的證據範圍與 anchor。
 - **Versioned Evaluation Dataset（評估資料集）**：以 tune、validation、test 分割資料，並檢查 group leakage。
 - **Isolated Trials（隔離試驗）**：每組文件切分與檢索設定使用獨立的 evaluation run 與 Qdrant collection。
-- **Retrieval Search（檢索搜尋）**：支援 deterministic grid search 與 random search。
+- **Retrieval Search（檢索搜尋）**：支援 deterministic grid search 與 random search，且不呼叫 LLM。
 - **Hard Constraints and Pareto Frontier**：先排除不符合條件的候選設定，再從非支配解中選出推薦項目。
 - **Identifier-aware Retrieval**：聯集 dense 與 identifier-filtered 結果，並套用 exact-match boost 與 confusable penalty。
 - **Embedding Cache**：以內容雜湊持久化快取，相同 chunk 文字可跨 trial 重用向量。
-- **Human Review（人工審核）**：候選問題需經人工接受、編輯與證據確認後，才能發布為新版資料集；編輯一律產生新的 revision。
 - **Safe Apply and Rollback（套用與回滾）**：透過 corpus／dataset hash、typed confirmation、idempotency 與 Qdrant alias 控制套用與回滾。
 - **Reporting UI（報表介面）**：提供 Overview、Search、Review、Deployment 等唯讀報表。
 
-### 工作流程
+### 兩個相連的 Loop
+
+v1.1 由兩個互相銜接的流程組成：先建立評估資料，再用它最佳化檢索。
+
+**Loop A — Evaluation Dataset Authoring**
 
 ```
-受版控示範語料
+受版控文件／文件 Segment
+  → LLM Candidate Generator（問題與證據候選）
+  → 人工審核／編輯
   → Canonical Evidence
+  → 發布版本化 Dataset
+  → Coverage／Failure Review
+  → 使用者依報告啟動下一輪 Candidate Generation
+```
+
+Coverage／Failure Report 指出下一輪值得補強的知識點，但系統不會自動挑選下一個 Segment，
+也不會自動開始下一輪；下一輪生成由使用者根據報告明確啟動。
+
+**Loop B — Retrieval Optimization**
+
+```
+版本化 Dataset
   → 隔離 Trial
-  → 文件切分／檢索參數搜尋
+  → 文件切分／檢索設定搜尋
+  → Metrics
   → Hard Constraints
   → Pareto Frontier
   → Recommendation Lock
-  → held-out test split 驗收
-  → 人工審核
-  → 安全套用／回滾
+  → held-out Test Split 驗收
+  → Failure／Coverage Report
 ```
 
-搜尋階段會列舉候選設定並在隔離 trial 中評估；硬性限制條件先排除不可行的設定，Pareto
-frontier 再從其餘候選中選出推薦項目並鎖定。推薦設定需通過 held-out test split 驗收，評估
-資料集的擴充則走人工審核流程。套用與回滾為受控操作，預設停用。
+兩個 Loop 相連：Loop B 的 Failure／Coverage Report 會成為 Loop A 下一輪 Dataset Authoring
+的輸入，形成「建立資料 → 檢索實驗 → 發現缺口 → 補充資料」的迭代，但每一步仍需人工啟動。
 
 ### 架構
 
 ```mermaid
 flowchart LR
-    subgraph Offline[離線 · CLI / Optimizer（人工把關）]
-        CORPUS[Tracked Corpus] --> CANON[Canonical Evidence]
-        CANON --> TRIALS[Isolated Trials]
+    subgraph Authoring[Loop A · Dataset Authoring（LLM 提案 + 人工把關）]
+        CORPUS[Tracked Documents] --> GEN[LLM Candidate Generator]
+        GEN --> REVIEW[Human Review CLI]
+        REVIEW --> CANON[Canonical Evidence]
+        CANON --> DATASET[(Versioned Dataset)]
+    end
+
+    subgraph Offline[Loop B · Retrieval Optimization（隔離 Trial）]
+        DATASET --> TRIALS[Isolated Trials]
         TRIALS --> SEARCH[Chunk/Retrieval Search]
         SEARCH --> CONS[Hard Constraints] --> PARETO[Pareto] --> LOCK[Recommendation Lock]
         LOCK --> TEST[Test Split 驗收]
-        REVIEW[Human Review CLI] --> DATASET[(Versioned Dataset)]
+        TEST --> FAIL[Failure/Coverage Report]
+        FAIL -. 使用者啟動下一輪 authoring .-> GEN
     end
 
     subgraph DBs[獨立 Read-only SQLite（分開配置）]
@@ -104,6 +164,61 @@ flowchart LR
 
 目前結果僅適用於受版控的示範語料，不代表已找到全域最佳參數，也尚未經過生產環境驗證。
 
+### LLM-assisted Dataset Authoring
+
+以下流程用 LLM Candidate Generator 建立並發布一版新的評估資料集。指令的 flag 皆來自
+`review.cli` 目前的 `--help`；`<...>` 為需自行填入的實際值（session id、candidate id、
+文件 SHA-256 等），請勿填入假值，也不要把 API key 寫進指令。
+
+```bash
+# 1. 建立 Review Session（固定 base dataset 與 corpus hash）
+python -m evaluation.v11.review.cli session create \
+  --name my-review --base-dataset evaluation/datasets/<base>.json
+
+# 2. 用 LLM Generator 依指定文件片段產生候選（需已設定 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL）
+#    未設定時可改用 --generator fake，或 candidate add 手動新增
+python -m evaluation.v11.review.cli candidate generate \
+  --session <session-id> --document-sha <document-sha> --generator llm --count 3
+
+# 3. 檢視候選
+python -m evaluation.v11.review.cli candidate list --session <session-id>
+python -m evaluation.v11.review.cli candidate show --candidate <candidate-id>
+
+# 4. 逐筆 Accept／Edit／Reject（沒有批次自動接受）
+python -m evaluation.v11.review.cli candidate edit   --candidate <candidate-id> --question "..."
+python -m evaluation.v11.review.cli candidate accept --candidate <candidate-id> --split validation
+
+# 5. 確認證據：先定位候選 span，人工確認後再加為 evidence
+python -m evaluation.v11.review.cli evidence find --anchor "E102" --document-sha <document-sha>
+python -m evaluation.v11.review.cli evidence add  --candidate <candidate-id> \
+  --document-sha <document-sha> --canonical-version <ver> --char-start <n> --char-end <n>
+
+# 6. 檢視 coverage，並發布新版資料集（--out 已存在即拒絕）
+python -m evaluation.v11.review.cli coverage show --session <session-id>
+python -m evaluation.v11.review.cli dataset publish \
+  --session <session-id> --version v1.1-eval-2 --out evaluation/datasets/<new>.json
+
+# 7. 用新版資料集執行檢索搜尋（Loop B；此階段不呼叫 LLM）
+python -m evaluation.v11.search.cli search --config <search.json> --db storage/optimizer.db
+```
+
+Candidate 的 `answerable`、`group`、`split`、evidence 與 `unanswerable` 確認一律由人工在
+Review 流程決定，LLM 只提供建議值。
+
+### LLM API 共用關係
+
+`/api/query` 與 v1.1 的 LLM Candidate Generator 共用同一組 OpenAI-compatible provider 設定
+（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`），且都經由同一個 `LLMClient`
+（[app/services/llm_client.py](app/services/llm_client.py)）呼叫 provider。
+
+兩者用途與請求彼此獨立：
+
+- `/api/query`：依向量檢索結果回答使用者問題。
+- Candidate Generator：閱讀指定文件片段，提出評估案例候選。
+
+它們不共享 conversation history，也不是同一次 HTTP request；Generator 只把本次請求的
+segment 放進 prompt，不提供整份 corpus，且不保存 prompt 全文、response 全文或 API key。
+
 ### 使用方式
 
 以下指令可在不提供 API key 的情況下執行 optimizer 核心流程。
@@ -120,7 +235,7 @@ python -m evaluation.v11.cli run --config evaluation/configs/slice4-identifier-s
 # 檢索搜尋（grid／random search + constraints + Pareto + recommendation）
 python -m evaluation.v11.search.cli --config evaluation/configs/slice5-optimizer-smoke-v2.json
 
-# Human Review CLI：建立與審核新版評估資料集
+# Human Review / LLM Dataset Authoring CLI（完整流程見上方 LLM-assisted Dataset Authoring）
 python -m evaluation.v11.review.cli --help
 
 # 建立 UI 示範資料；不建立 Qdrant collection，也不呼叫 LLM
@@ -176,6 +291,9 @@ docker compose --profile cli run --rm optimizer-cli \
 - 尚未提供 RBAC、多人審核或背景工作佇列（無 Redis／Celery）。
 - 目前未實作 BM25、sparse／hybrid retrieval、reranker 或完整 active sampling。
 - 管理介面定位為 single-machine local admin，不建議直接暴露至公開網路。
+- 每一輪 Candidate Generation、Human Review、Dataset Publish 與 Retrieval Search 都需由使用者
+  明確啟動。Coverage／Failure Report 可作為下一輪資料擴充的依據，但目前不是常駐背景 daemon，
+  也不會在無人工控制的情況下持續呼叫 LLM 或自動發布資料集。
 
 ### 畫面展示（示範資料）
 
@@ -374,6 +492,7 @@ docker compose ps
 
 **Retrieval Optimizer（v1.1）**
 
+- LLM-assisted candidate generation（評估問題與證據候選提案，一律以 proposed 落庫）
 - Canonical evidence 與版本化評估資料集
 - 隔離的 chunking／retrieval trial 與 embedding cache
 - Grid／random search、hard constraints 與 Pareto frontier 選擇
