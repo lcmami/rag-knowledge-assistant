@@ -6,6 +6,41 @@
 
 ---
 
+# 版本狀態（Version Status）
+
+> 本節為後續版本的實作狀態摘要；以下第 0 節起為原始 v1.0 規格書，內容保留不變。
+
+- **v1.0 — RAG MVP**：已交付（tag `v1.0-rag-mvp`）。
+- **v1.1 — Human-in-the-loop Retrieval Optimizer**：已實作（feature branch）。
+- **v1.2 — LLM-guided Retrieval Optimization Agent**：**implemented and runtime-verified**
+  （feature branch；尚未 merge／tag／release）。
+
+## v1.2 狀態
+
+**Completed**
+
+- bounded LLM agent loop（有界的 rounds／LLM calls）
+- controlled context（受控原文 context；validation 對 LLM 只給 coarse gate）
+- strict proposal validation（whitelist-only、界限、probe 綁定與 anchor 存在性）
+- candidate trial（隔離 `optimizer_` collection 的真實試驗）
+- parent/candidate probe comparison
+- deterministic promotion（重用 v1.1 constraint + recommendation ordering；LLM 不參與勝負）
+- minimal audit（匿名化，不存 secret／完整 prompt／文件全文）
+- real-provider verification（一次 OpenAI-compatible Provider 單輪端到端驗收）
+
+**Deferred**
+
+- held-out recommendation lock（held-out test 與 recommendation eligibility 仍為 `not_evaluated`）
+- full persistence / resume
+- reporting UI
+- dataset expansion loop
+- adaptive multi-proposal search
+
+詳見 [docs/v1.2-runtime-acceptance.md](docs/v1.2-runtime-acceptance.md) 與 README 的
+「v1.2 — LLM-guided Retrieval Optimization Agent」章節。
+
+---
+
 # 0. 給 Claude CLI 的任務指示
 
 請先完整閱讀本規格書，分析需求、依賴關係、技術風險與開發順序，然後產生一份可實際執行的開發計畫。

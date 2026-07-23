@@ -1,0 +1,96 @@
+{
+  "schema_version": "1.0",
+  "run_name": "v12-agent-smoke",
+  "random_seed": 42,
+  "prompt_version": "v1",
+  "dataset_path": "evaluation/datasets/v1.1/cases-v2.json",
+  "corpus_paths": [
+    "sample_docs",
+    "evaluation/fixtures"
+  ],
+  "baseline": {
+    "chunk_config": {
+      "strategy": "current"
+    },
+    "retrieval_config": {
+      "strategy": "dense",
+      "top_k": 5,
+      "score_threshold": 0.55,
+      "candidate_multiplier": 3,
+      "candidate_cap": 50
+    }
+  },
+  "allowed_parameter_space": {
+    "chunk_strategies": [
+      "current",
+      "paragraph",
+      "heading"
+    ],
+    "retrieval_strategies": [
+      "dense",
+      "identifier_aware"
+    ],
+    "bounds": {
+      "top_k": [3, 8],
+      "score_threshold": [0.3, 0.7],
+      "target_chars": [300, 1000],
+      "overlap_chars": [0, 250]
+    },
+    "bool_fields": [
+      "prepend_section_title"
+    ]
+  },
+  "budget": {
+    "max_rounds": 2,
+    "max_llm_calls": 4,
+    "max_probe_questions": 3,
+    "max_parameter_changes": 2,
+    "no_improvement_rounds": 2,
+    "max_consecutive_rejections": 2,
+    "context_char_budget": 12000
+  },
+  "promotion": {
+    "hard_constraints": [
+      {
+        "name": "exact_code_no_regression_vs_parent",
+        "metric": "exact_code_top1_accuracy",
+        "scope": "aggregate",
+        "operator": ">=",
+        "baseline_delta": 0.0,
+        "safety_critical": false,
+        "on_not_computable": "fail"
+      },
+      {
+        "name": "unanswerable_false_positive_ceiling",
+        "metric": "unanswerable_false_positive_rate",
+        "scope": "aggregate",
+        "operator": "<=",
+        "value": 0.5,
+        "safety_critical": false,
+        "on_not_computable": "fail"
+      }
+    ],
+    "comparator_ranking": [
+      {
+        "key": "constraint_pass_count",
+        "direction": "maximize"
+      },
+      {
+        "key": "exact_code_top1_accuracy",
+        "direction": "maximize"
+      },
+      {
+        "key": "unanswerable_false_positive_rate",
+        "direction": "minimize"
+      },
+      {
+        "key": "mrr",
+        "direction": "maximize"
+      },
+      {
+        "key": "config_hash",
+        "direction": "minimize"
+      }
+    ]
+  }
+}
