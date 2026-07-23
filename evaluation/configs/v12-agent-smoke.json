@@ -45,7 +45,7 @@
     "max_llm_calls": 4,
     "max_probe_questions": 3,
     "max_parameter_changes": 2,
-    "no_improvement_rounds": 1,
+    "no_improvement_rounds": 2,
     "max_consecutive_rejections": 2,
     "context_char_budget": 12000
   },
