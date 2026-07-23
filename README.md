@@ -10,6 +10,12 @@ v1.1 在此之上新增一套 LLM-assisted、human-in-the-loop 的檢索評估�
 LLM 協助閱讀指定文件片段、提出評估問題與證據候選，再由人工審核、版本化評估資料集、
 隔離檢索試驗與評估指標形成閉環，用來降低建立與維護 RAG 評估資料所需的人力成本。
 
+v1.2 再加入一個**有界（bounded）的 LLM-guided 檢索最佳化 Agent**：LLM 閱讀受控的文件、
+Chunk 與失敗片段，提出診斷、Probe Questions 與下一輪 Retrieval Config，接著由嚴格的
+Proposal Validator、隔離 Candidate Trial、Parent／Candidate Probe 比較，以及固定資料集上的
+Metrics、Constraints 與 deterministic promotion gate 來判定候選是否勝出。詳見
+[v1.2 — LLM-guided Retrieval Optimization Agent](#v12--llm-guided-retrieval-optimization-agent)。
+
 > **LLM 狀態**：LLM 呼叫層（OpenAI-compatible Chat Completions）已完成，並已以外部 Provider
 > 完成一次端到端驗證（見 [端到端驗證結果](#端到端驗證結果)）。未設定 LLM 時，`/api/query` 會
 > 回傳 `503 LLM_NOT_CONFIGURED`，文件管理與向量檢索（`/api/retrieve`）仍可正常使用。
@@ -307,6 +313,144 @@ docker compose --profile cli run --rm optimizer-cli \
 </p>
 
 > 截圖皆使用示範資料（畫面標示 Demo），不含私人路徑、API key 或文件全文，也不表示任何 apply 已成功。
+
+---
+
+## v1.2 — LLM-guided Retrieval Optimization Agent
+
+**有界的 LLM-guided 檢索最佳化 Agent** — LLM 只提出假設與設定，是否勝出一律交由固定資料集、
+Metrics、Constraints 與 deterministic gate 判定。
+
+### Project Positioning
+
+建立可靠 RAG 的主要隱性成本，不只是 Vector DB 或 API，還包括人工閱讀文件、設計 Chunking、
+建立評估問題、綁定 Evidence、執行測試，以及反覆診斷 Retrieval Failure。
+
+v1.2 的價值在於讓 LLM 協助閱讀文件結構、Chunk 與 Failure，提出 Probe Questions 與下一輪
+Retrieval Config，再由固定資料集、Metrics、Constraints 與 deterministic gate 驗證。它是把人工
+反覆試錯的一部分變成受控、可稽核的迴圈，**不宣稱能完全取代領域人工專家**：出題品質、證據正確性
+與正式評分基準仍以人工審核過的資料集為準。
+
+### v1.2 Agent Loop
+
+```mermaid
+flowchart LR
+    subgraph LLM[LLM · 只提出假設與設定]
+        CTX[Controlled Document / Chunk / Failure Context] --> DIAG[LLM Diagnosis and Proposal]
+    end
+
+    subgraph EVAL[Programmatic Evaluation · 決定 Candidate 是否勝出]
+        VAL[Strict Proposal Validator] --> TRIAL[Candidate Trial]
+        TRIAL --> PROBE[Parent/Candidate Probe Comparison]
+        PROBE --> METRIC[Official Metrics and Constraints]
+        METRIC --> GATE[Deterministic Promotion Decision]
+        GATE --> NEXT{Next Round or Stop}
+    end
+
+    subgraph DATA[Human-reviewed Dataset · 正式評分依據]
+        DS[(Versioned tune / validation / test splits)]
+    end
+
+    DIAG --> VAL
+    NEXT -. 下一輪受控 context .-> CTX
+    DS --> TRIAL
+    DS --> METRIC
+```
+
+- **LLM**：閱讀受控的文件片段、Chunk 與失敗實況，提出診斷、Probe Questions 與下一輪
+  Chunking／Retrieval 設定。它只提案，不決定自己的提案是否勝出。
+- **Programmatic Evaluation**：Strict Validator → Candidate Trial → Parent／Candidate Probe
+  比較 → Metrics／Constraints → deterministic promotion gate，決定候選是否成為下一輪 Parent。
+- **Human-reviewed Dataset**：tune／validation／test 分割皆來自 v1.1 人工審核過的評估資料集，
+  是唯一的正式評分依據；LLM 在迴圈中只看得到 tune 逐題資料與 validation 的 coarse gate。
+
+### Quick Start
+
+以下指令可在**不呼叫任何 Provider** 的情況下跑完 Fake Planner 迴圈（需可連線的 Qdrant）：
+
+```powershell
+# Fake Planner（不呼叫 LLM）
+python -m evaluation.v12.agent.cli optimize `
+  --config evaluation/configs/v12-agent-smoke.json `
+  --planner fake `
+  --max-rounds 2
+
+# 檢視匿名化 Audit（<agent_run_id> 與 <agent.db> 皆由上一步的 Run Summary 印出）
+python -m evaluation.v12.agent.cli show <agent_run_id> --agent-db <agent.db>
+
+# Real LLM：只有明確指定 --planner llm 才會呼叫 Provider
+python -m evaluation.v12.agent.cli optimize `
+  --config evaluation/configs/v12-agent-smoke.json `
+  --planner llm `
+  --max-rounds 1
+```
+
+`optimize` 的 Run Summary 會印出 `Run ID` 與 `Agent DB` 路徑，供 `show` 使用；可加
+`--workdir <dir>` 固定輸出位置。真實 LLM 路徑需要下列環境（**不會**因環境存在金鑰就自動呼叫，
+一律需明確 `--planner llm`）：
+
+```text
+LLM_BASE_URL
+LLM_API_KEY
+LLM_MODEL
+Qdrant（--qdrant-url 或 QDRANT_URL）
+```
+
+> 真實 Provider 設定只放本機 `.env`（已被 `.gitignore` 忽略）；請勿在指令、log 或文件中顯示金鑰。
+
+### Safety Boundaries
+
+- Bounded rounds 與 LLM calls（由 run config 的 `budget` 硬性上限）。
+- Strict JSON Proposal Schema，parser／validator 獨立於 LLM。
+- Whitelist-only Config：只能提出白名單內的 chunking／retrieval 欄位與界限。
+- Human-reviewed official dataset：正式評分依據為人工審核過的資料集。
+- Validation 對 LLM 隱藏，只提供 coarse gate（pass／fail／not_evaluated）。
+- Held-out test split 不進入 Emergency MVP 迴圈。
+- 不自動 Apply。
+- 不自動 Publish Dataset。
+- 受保護的正式 collection（`factory_knowledge` 永不被觸碰）。
+- 安全的 collection 清理（只刪 `optimizer_` 前綴）。
+- 匿名化 Audit：不保存 secret、完整 prompt 或文件全文。
+
+### Runtime Verification
+
+以下為一次匿名化的實際 runtime 驗收摘要（詳見
+[docs/v1.2-runtime-acceptance.md](docs/v1.2-runtime-acceptance.md)）：
+
+```text
+Fake Qdrant:
+  2 rounds
+  2 candidate trials
+  Parent/Candidate probes executed
+  Probe feedback entered the next round
+  Candidates rejected by deterministic gate
+  No residual collections
+
+Real LLM:
+  Provider type: OpenAI-compatible
+  Model: llama-3.3-70b-versatile
+  1 valid proposal
+  score_threshold 0.55 -> 0.50
+  Candidate trial completed
+  3 probes compared on parent and candidate
+  Official metrics and constraints completed
+  Candidate rejected by deterministic gate
+  No Apply, Publish, Alias Switch or residual collection
+```
+
+Candidate rejection is a valid result. The LLM proposes experiments; it does not decide
+whether its own proposal wins. 驗收摘要不含 API key、完整 prompt、文件全文或私人資料。
+
+### Limitations
+
+- Demo baseline 在示範資料上的 Accuracy／MRR 已是 1.0，因此本迴圈證明的是「迴圈與拒絕行為正確」，
+  而非可量測的品質改善。
+- 只能提出既有 whitelist 內的 chunking／retrieval 參數。
+- Recommendation Eligibility 維持 `not_evaluated`，因為 held-out test 與 recommendation lock
+  不在 Emergency MVP 範圍內。
+- 目前只有最小 Audit；完整的 resume 與報表 UI 仍為 deferred。
+- 單一真實 provider／model 的一次執行，不足以證明跨模型的穩健性。
+- Token usage 可能為 null，因為共用的正式 LLM client 只回傳文字。
 
 ---
 
