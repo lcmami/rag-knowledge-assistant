@@ -166,7 +166,10 @@ class RoundRecord:
     round_number: int
     parent_config_hash: str
     candidate_config_hash: Optional[str] = None
+    parent_trial_id: Optional[str] = None
+    candidate_trial_id: Optional[str] = None
     context_hash: Optional[str] = None
+    response_hash: Optional[str] = None
     proposal: Optional[dict[str, Any]] = None
     validation_result: Optional[dict[str, Any]] = None
     executed_config_hash: Optional[str] = None
@@ -181,6 +184,10 @@ class RoundRecord:
     candidate_accepted: bool = False
     confidence: Optional[float] = None
     stop_recommendation: Optional[bool] = None
+    stop_decision: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    token_usage: Optional[dict[str, Any]] = None
     error: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -188,7 +195,10 @@ class RoundRecord:
             "round_number": self.round_number,
             "parent_config_hash": self.parent_config_hash,
             "candidate_config_hash": self.candidate_config_hash,
+            "parent_trial_id": self.parent_trial_id,
+            "candidate_trial_id": self.candidate_trial_id,
             "context_hash": self.context_hash,
+            "response_hash": self.response_hash,
             "proposal": self.proposal,
             "validation_result": self.validation_result,
             "executed_config_hash": self.executed_config_hash,
@@ -203,6 +213,10 @@ class RoundRecord:
             "candidate_accepted": self.candidate_accepted,
             "confidence": self.confidence,
             "stop_recommendation": self.stop_recommendation,
+            "stop_decision": self.stop_decision,
+            "provider": self.provider,
+            "model": self.model,
+            "token_usage": self.token_usage,
             "error": self.error,
         }
 
@@ -214,6 +228,11 @@ class AgentRunResult:
     stop_reason: str
     baseline_config_hash: str
     final_parent_config_hash: str
+    run_name: str = ""
+    planner_type: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    prompt_version: Optional[str] = None
     rounds: list[RoundRecord] = field(default_factory=list)
     llm_calls: int = 0
     candidates_proposed: int = 0
@@ -229,10 +248,15 @@ class AgentRunResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "agent_run_id": self.agent_run_id,
+            "run_name": self.run_name,
             "status": self.status,
             "stop_reason": self.stop_reason,
             "baseline_config_hash": self.baseline_config_hash,
             "final_parent_config_hash": self.final_parent_config_hash,
+            "planner_type": self.planner_type,
+            "provider": self.provider,
+            "model": self.model,
+            "prompt_version": self.prompt_version,
             "llm_calls": self.llm_calls,
             "candidates_proposed": self.candidates_proposed,
             "candidates_promoted": self.candidates_promoted,
@@ -290,6 +314,11 @@ class AgentOrchestrator:
             stop_reason="",
             baseline_config_hash=baseline_hash,
             final_parent_config_hash=baseline_hash,
+            run_name=cfg.run_name,
+            planner_type=getattr(self._planner, "planner_type", None),
+            provider=getattr(self._planner, "provider", None),
+            model=getattr(self._planner, "model", None),
+            prompt_version=cfg.prompt_version,
         )
 
         live_collections: set[str] = set()
@@ -334,7 +363,7 @@ class AgentOrchestrator:
 
                 # ---- PROPOSAL: propose + parse + validate (one bounded retry) ----
                 result.llm_calls += 1
-                proposal, vres, perr = self._propose_and_validate(
+                proposal, vres, perr, raw = self._propose_and_validate(
                     context, parent.trial, tested_hashes
                 )
                 if result.llm_calls < cfg.budget.max_llm_calls and (
@@ -342,14 +371,18 @@ class AgentOrchestrator:
                 ):
                     # bounded retry（對決定性 fake 無效，但對真實 LLM 暫時性失敗有用）
                     result.llm_calls += 1
-                    proposal, vres, perr = self._propose_and_validate(
+                    proposal, vres, perr, raw = self._propose_and_validate(
                         context, parent.trial, tested_hashes
                     )
 
                 record = RoundRecord(
                     round_number=round_number,
                     parent_config_hash=parent.config_hash,
+                    parent_trial_id=parent.tune.trial_id,
                     context_hash=context.context_hash,
+                    response_hash=_sha256(raw) if raw is not None else None,
+                    provider=getattr(self._planner, "provider", None),
+                    model=getattr(self._planner, "model", None),
                     metrics_before=_coarse(parent, self._comparator_refs),
                 )
                 if proposal is not None:
@@ -394,6 +427,7 @@ class AgentOrchestrator:
                 tested_hashes.add(vres.config_hash)
                 result.candidates_proposed += 1
                 record.candidate_config_hash = vres.config_hash
+                record.candidate_trial_id = candidate.validation.trial_id
                 record.executed_config_hash = vres.config_hash
                 record.tune_trial_id = candidate.tune.trial_id
                 record.validation_trial_id = candidate.validation.trial_id
@@ -470,6 +504,8 @@ class AgentOrchestrator:
                 if stop_reason in _COMPLETED_REASONS
                 else AgentState.STOPPED
             )
+            if result.rounds:
+                result.rounds[-1].stop_decision = stop_reason
             result.final_parent_config_hash = parent.config_hash
             result.final_metric_summary = _coarse(parent, self._comparator_refs)
             return result
@@ -489,22 +525,22 @@ class AgentOrchestrator:
     # ------------------------------------------------------------------
     def _propose_and_validate(
         self, context, parent: TrialConfig, tested_hashes: set[str]
-    ) -> tuple[Optional[Any], Optional[ValidationResult], Optional[str]]:
+    ) -> tuple[Optional[Any], Optional[ValidationResult], Optional[str], Optional[str]]:
         try:
             raw = self._planner.propose(context)
         except Exception as exc:  # noqa: BLE001 - provider/planner 失敗轉明確訊息
-            return None, None, f"llm_error:{type(exc).__name__}"
+            return None, None, f"llm_error:{type(exc).__name__}", None
         try:
             proposal = parse_proposal(raw)
         except ProposalParseError as exc:
-            return None, None, f"parse_error:{exc}"
+            return None, None, f"parse_error:{exc}", raw
         vres = self._validator.validate(
             proposal,
             parent=parent,
             tested_config_hashes=tested_hashes,
             segment_texts=context.segment_texts(),
         )
-        return proposal, vres, None
+        return proposal, vres, None, raw
 
     def _run_node(
         self, trial: TrialConfig, config_hash: str, splits: SplitPaths, label: str
@@ -613,6 +649,12 @@ def _default_id() -> str:
     import uuid
 
     return uuid.uuid4().hex
+
+
+def _sha256(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _coarse(node: _NodeState, refs) -> dict[str, Any]:
