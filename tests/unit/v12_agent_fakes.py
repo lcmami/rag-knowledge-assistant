@@ -84,7 +84,17 @@ class FakeTrialExecutor:
         self, *, collection_name: str, trial: TrialConfig, question: str, top_k: int
     ) -> list[dict[str, Any]]:
         self.retrieved.append((collection_name, question))
-        return []
+        # 決定性 probe 結果：top_k 越大 → top1 分數越高（供 candidate_better 訊號）。
+        score = round(0.5 + 0.01 * trial.top_k, 4)
+        return [
+            {
+                "rank": 1,
+                "score": score,
+                "chunk_id": f"chunk-{trial.top_k}",
+                "chunk": "D900 overheat fault",
+                "identifiers": ["D900"],
+            }
+        ]
 
     def cleanup(self, collection_name: Optional[str]) -> None:
         if collection_name:
