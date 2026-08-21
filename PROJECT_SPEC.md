@@ -11,9 +11,9 @@
 > 本節為後續版本的實作狀態摘要；以下第 0 節起為原始 v1.0 規格書，內容保留不變。
 
 - **v1.0 — RAG MVP**：已交付（tag `v1.0-rag-mvp`）。
-- **v1.1 — Human-in-the-loop Retrieval Optimizer**：已實作（feature branch）。
-- **v1.2 — LLM-guided Retrieval Optimization Agent**：**implemented and runtime-verified**
-  （feature branch；尚未 merge／tag／release）。
+- **v1.1 — Human-in-the-loop Retrieval Optimizer**：已交付（tag `v1.1-retrieval-optimizer`）。
+- **v1.2 — LLM-guided Retrieval Optimization Agent**：**implemented and runtime-verified**，
+  已 merge 至 `main`（merge commit `aec93b7`）、tag `v1.2-llm-agent-mvp`，GitHub Release 已發布。
 
 ## v1.2 狀態
 
@@ -351,6 +351,9 @@ Embedding 模型與 FastAPI 放在同一 Container。
 ---
 
 # 7. 建議專案目錄
+
+> 本目錄為 v1.0 原始草案，**已過時**（未包含 `evaluation/v11`、`evaluation/v12`、`docs/` 等後續新增）。
+> 目前實際結構見 README 的「專案結構」章節。
 
 ```text
 factory-rag-assistant/
@@ -1932,6 +1935,11 @@ v1.0-rag-mvp
 ---
 
 # 33. 第二階段 Agent 擴充
+
+> **廢棄路線**：本節描述的工具型 Agent（`search_documents` / `check_service_health` /
+> `list_documents`，tag `v1.1-tool-agent`）**從未實作**。實際的 v1.1 改為
+> Human-in-the-loop Retrieval Optimizer（見 `docs/v1.1-*`），v1.2 為 LLM-guided Retrieval
+> Optimization Agent（見 `docs/v1.2-runtime-acceptance.md`）。本節保留供設計演進紀錄。
 
 只有在 RAG MVP 全部完成後才開始。
 
