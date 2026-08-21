@@ -20,6 +20,16 @@ Metrics、Constraints 與 deterministic promotion gate 來判定候選是否勝�
 > 完成一次端到端驗證（見 [端到端驗證結果](#端到端驗證結果)）。未設定 LLM 時，`/api/query` 會
 > 回傳 `503 LLM_NOT_CONFIGURED`，文件管理與向量檢索（`/api/retrieve`）仍可正常使用。
 
+### 版本
+
+| 版本 | Tag | 內容 |
+| --- | --- | --- |
+| v1.0 | `v1.0-rag-mvp` | RAG 核心：文件管理、向量檢索、LLM 問答、Citation 驗證與雙層拒答 |
+| v1.1 | `v1.1-retrieval-optimizer` | [Human-in-the-loop Retrieval Optimizer](#v11--human-in-the-loop-retrieval-optimizer)：LLM 協助出題 + 人工審核 + 隔離檢索試驗 |
+| v1.2 | `v1.2-llm-agent-mvp` | [LLM-guided Retrieval Optimization Agent](#v12--llm-guided-retrieval-optimization-agent)：有界 Agent 迴圈 + deterministic promotion gate |
+
+三個版本皆為累加，v1.2 的 Agent 直接使用 v1.1 人工審核過的評估資料集作為正式評分依據。
+
 ---
 
 ## v1.1 — Human-in-the-loop Retrieval Optimizer
@@ -646,6 +656,17 @@ docker compose ps
 - 唯讀報表 API 與前端分頁
 - Docker CLI profile 與 Playwright E2E 覆蓋
 
+**LLM-guided Agent（v1.2）**
+
+- 有界 Agent 迴圈（rounds 與 LLM calls 由 run config 的 `budget` 硬性上限控制）
+- 受控 context 組裝（文件結構、Chunk、Failure 片段；`editable_current_config` 只含白名單欄位）
+- Strict JSON Proposal Schema 與獨立於 LLM 的 parser／validator
+- Fake Planner（不呼叫 Provider）與 LLM Planner（需明確 `--planner llm`）
+- 隔離 Candidate Trial 與 Parent／Candidate Probe 比較
+- Official metrics／constraints 與 deterministic promotion gate
+- 匿名化 Audit（不保存 secret、完整 prompt 或文件全文）與 `show` 檢視 CLI
+- 安全的 collection 清理（只刪 `optimizer_` 前綴，`factory_knowledge` 永不被觸碰）
+
 ---
 
 ## 端到端驗證結果
@@ -706,15 +727,19 @@ Page Hit@1 = 1.0
 
 ## 測試結果
 
-v1.1 發布前的驗證結果（實際重新執行）：
+v1.2 目前的測試規模：
 
 ```text
-804 unit tests passed
-36 non-LLM integration tests passed
-7 Playwright tests passed
+880 unit tests            # 804（v1.0 / v1.1）+ 76（v1.2 agent）
+36 non-LLM integration    # 需可連線的 Qdrant
+7 Playwright E2E
 ```
 
-其中 4 個 `llm_integration` 測試在非 LLM 驗證流程中被 deselect（未設定 LLM 環境變數時自動 skip）。
+其中 880 個 unit test 為最近一次實際重新執行並全數通過（不需外部服務）；integration 與 E2E
+需要 Qdrant／已啟動的 API，數量為目前收集到的測試數。
+
+另有 5 個 `llm_integration` 測試在非 LLM 驗證流程中被 deselect（未設定 LLM 環境變數時自動
+skip），包含 v1.2 的 [tests/integration/test_v12_agent_llm_smoke.py](tests/integration/test_v12_agent_llm_smoke.py)。
 
 ```powershell
 # 單元測試（Fake LLM，不需外部服務）
@@ -770,8 +795,12 @@ app/
   static/        Vanilla JS 前端（index.html / styles.css / app.js / optimizer.js）
   main.py        FastAPI app 與 lifespan
 sample_docs/     範例文件（md / txt / pdf）
-evaluation/      Retrieval 評估與 v1.1 optimizer（v11/：chunking / retrieval / search /
-                 review / deploy / reporting）、datasets / configs / fixtures
+evaluation/      Retrieval 評估與 optimizer
+  v11/           v1.1：chunking / retrieval / search / review / deploy / reporting
+  v12/agent/     v1.2：context / planner / proposal / validator / executor / probes /
+                 orchestrator / repository / cli
+  datasets/ configs/ fixtures/    評估資料集、run config 與測試資料
 scripts/         示範與驗證腳本（含 optimizer UI demo seeder、screenshot 擷取）
+docs/            v1.1 需求／架構／計畫與 v1.2 runtime 驗收紀錄
 tests/           unit / integration / e2e（Playwright）
 ```
