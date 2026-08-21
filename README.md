@@ -13,7 +13,12 @@ LLM 協助閱讀指定文件片段、提出評估問題與證據候選，再由�
 v1.2 再加入一個**有界（bounded）的 LLM-guided 檢索最佳化 Agent**：LLM 閱讀受控的文件、
 Chunk 與失敗片段，提出診斷、Probe Questions 與下一輪 Retrieval Config，接著由嚴格的
 Proposal Validator、隔離 Candidate Trial、Parent／Candidate Probe 比較，以及固定資料集上的
-Metrics、Constraints 與 deterministic promotion gate 來判定候選是否勝出。詳見
+Metrics、Constraints 與 deterministic promotion gate 來判定候選是否勝出。
+
+**與一般 RAG Demo 的差別**：建立可靠 RAG 的隱性成本不只是 Vector DB 或 API，還包括人工閱讀
+文件、設計 Chunking、建立評估問題、綁定 Evidence 與反覆診斷 Retrieval Failure。這裡的 LLM 承擔
+其中的閱讀與提案，但**不決定自己的提案是否勝出**——勝負一律由人工審核過的資料集、Metrics 與
+deterministic gate 判定。詳見
 [v1.2 — LLM-guided Retrieval Optimization Agent](#v12--llm-guided-retrieval-optimization-agent)。
 
 > **LLM 狀態**：LLM 呼叫層（OpenAI-compatible Chat Completions）已完成，並已以外部 Provider
@@ -71,22 +76,8 @@ Deployment Service 都是同一個受控工作流程中的元件。
 - **Deployment Guard**：以 hash guard、typed confirmation、idempotency、append-only
   audit trail 與 Qdrant alias 切換，控制 apply／rollback。
 
-### 主要功能
-
-- **LLM-assisted Candidate Generation**：讀取指定文件片段，產生評估問題並附上 `query_type`、
-  `answerable_suggestion`、`anchor_text_suggestions`、`group_id_suggestion` 與 `rationale`
-  等候選欄位，供人工逐筆審核。所有候選一律以 `proposed` 狀態落庫，不會自動成為評估案例。
-- **Human Review（人工審核）**：候選必須經人工檢查、編輯、證據確認與接受後，才能發布為新版
-  評估資料集；每次編輯、加證據或接受都會產生新的、遞增的 revision，不覆寫歷史。
-- **Canonical Evidence（標準證據）**：將評估答案連結到原始文件中版本化的證據範圍與 anchor。
-- **Versioned Evaluation Dataset（評估資料集）**：以 tune、validation、test 分割資料，並檢查 group leakage。
-- **Isolated Trials（隔離試驗）**：每組文件切分與檢索設定使用獨立的 evaluation run 與 Qdrant collection。
-- **Retrieval Search（檢索搜尋）**：支援 deterministic grid search 與 random search，且不呼叫 LLM。
-- **Hard Constraints and Pareto Frontier**：先排除不符合條件的候選設定，再從非支配解中選出推薦項目。
-- **Identifier-aware Retrieval**：聯集 dense 與 identifier-filtered 結果，並套用 exact-match boost 與 confusable penalty。
-- **Embedding Cache**：以內容雜湊持久化快取，相同 chunk 文字可跨 trial 重用向量。
-- **Safe Apply and Rollback（套用與回滾）**：透過 corpus／dataset hash、typed confirmation、idempotency 與 Qdrant alias 控制套用與回滾。
-- **Reporting UI（報表介面）**：提供 Overview、Search、Review、Deployment 等唯讀報表。
+完整能力清單見下方[已完成能力](#已完成能力)；逐條需求與驗收條件見
+[docs/v1.1-retrieval-optimizer-requirements.md](docs/v1.1-retrieval-optimizer-requirements.md)。
 
 ### 兩個相連的 Loop
 
@@ -179,6 +170,8 @@ flowchart LR
 - `eval-e102-001` 的 first relevant rank 在 baseline 與推薦設定中皆為 2；同一 chunk 同時包含 E102 與 D900 的歧義尚未解決。
 
 目前結果僅適用於受版控的示範語料，不代表已找到全域最佳參數，也尚未經過生產環境驗證。
+Baseline 逐案例實測（15 cases、E102／D900 排名壓力測試、硬限制門檻推導）見
+[evaluation/baseline-v1.1.md](evaluation/baseline-v1.1.md)。
 
 ### LLM-assisted Dataset Authoring
 
@@ -256,11 +249,9 @@ python -m evaluation.v11.review.cli --help
 
 # 建立 UI 示範資料；不建立 Qdrant collection，也不呼叫 LLM
 python -m scripts.seed_optimizer_ui_demo --output-dir evaluation/demo
-
-# 測試
-python -m pytest tests/unit -q                                   # 全部 unit
-python -m pytest tests/integration -q -m "not llm_integration"   # 非 LLM 整合（需 Qdrant）
 ```
+
+單元／整合測試指令統一見下方[測試結果](#測試結果)。
 
 Deployment Admin 預設停用；停用時所有 write endpoint 一律回 403，不會建構或呼叫 service。
 啟用需明確設定 `OPTIMIZER_ADMIN_ENABLED=true`，且候選設定須符合套用條件。
@@ -291,13 +282,14 @@ docker compose --profile cli run --rm optimizer-cli \
 ### 安全機制
 
 - Admin API 預設停用（`OPTIMIZER_ADMIN_ENABLED=false`）；停用時 write endpoint 不建構、也不呼叫任何 service。
-- 不自動套用、回滾或初始化 alias；所有寫入操作都需人工 typed confirmation。
-- 套用前驗證 corpus、dataset、config 與 commit hash，與目前狀態不符即拒絕。
-- Typed confirmation（例如 `APPLY <alias> CONFIG <hash> FROM <current>`），後端會重新驗證。
-- Alias 採原子切換，不做 rename 或 delete。既有 `factory_knowledge` collection 被列為受保護資源，測試與部署流程使用獨立的 versioned collection。
-- 每次操作寫入 append-only 稽核紀錄，idempotency key 防止重複執行。
-- 報表為唯讀：UI 與 read API 以 SQLite `mode=ro` 開啟，不建立、不遷移、不修改資料，也不輸出私人路徑。
-- 示範資料標示 `demo_fixture=true`，不會偽造 apply 成功，也不會建立實際 alias。
+- 不自動套用、回滾或初始化 alias；所有寫入操作都需人工 typed confirmation，且套用前驗證
+  corpus／dataset／config／commit hash，與目前狀態不符即拒絕。
+- Alias 採原子切換，不做 rename 或 delete；既有 `factory_knowledge` 為受保護資源，測試與部署使用獨立的 versioned collection。
+- 報表為唯讀（SQLite `mode=ro`），每次寫入操作留 append-only 稽核紀錄；示範資料標示 `demo_fixture=true`，不會偽造 apply 成功。
+
+完整安全規則與 Apply／Rollback 流程見
+[requirements §9](docs/v1.1-retrieval-optimizer-requirements.md#9-safety-rules) 與
+[architecture §8](docs/v1.1-retrieval-optimizer-architecture.md#8-apply--rollback-與首次-alias-migration)。
 
 ### 目前限制
 
@@ -333,13 +325,10 @@ Metrics、Constraints 與 deterministic gate 判定。
 
 ### Project Positioning
 
-建立可靠 RAG 的主要隱性成本，不只是 Vector DB 或 API，還包括人工閱讀文件、設計 Chunking、
-建立評估問題、綁定 Evidence、執行測試，以及反覆診斷 Retrieval Failure。
-
-v1.2 的價值在於讓 LLM 協助閱讀文件結構、Chunk 與 Failure，提出 Probe Questions 與下一輪
-Retrieval Config，再由固定資料集、Metrics、Constraints 與 deterministic gate 驗證。它是把人工
-反覆試錯的一部分變成受控、可稽核的迴圈，**不宣稱能完全取代領域人工專家**：出題品質、證據正確性
-與正式評分基準仍以人工審核過的資料集為準。
+承開頭的專案定位（RAG 的隱性成本在於人工閱讀文件、設計 Chunking、建立評估問題、綁定 Evidence、
+執行測試與反覆診斷 Retrieval Failure）：v1.2 把人工反覆試錯的一部分變成受控、可稽核的迴圈，
+**不宣稱能完全取代領域人工專家**——出題品質、證據正確性與正式評分基準，仍以 v1.1 人工審核過的
+評估資料集為準。
 
 ### v1.2 Agent Loop
 
@@ -451,16 +440,8 @@ Real LLM:
 Candidate rejection is a valid result. The LLM proposes experiments; it does not decide
 whether its own proposal wins. 驗收摘要不含 API key、完整 prompt、文件全文或私人資料。
 
-### Limitations
-
-- Demo baseline 在示範資料上的 Accuracy／MRR 已是 1.0，因此本迴圈證明的是「迴圈與拒絕行為正確」，
-  而非可量測的品質改善。
-- 只能提出既有 whitelist 內的 chunking／retrieval 參數。
-- Recommendation Eligibility 維持 `not_evaluated`，因為 held-out test 與 recommendation lock
-  不在 Emergency MVP 範圍內。
-- 目前只有最小 Audit；完整的 resume 與報表 UI 仍為 deferred。
-- 單一真實 provider／model 的一次執行，不足以證明跨模型的穩健性。
-- Token usage 可能為 null，因為共用的正式 LLM client 只回傳文字。
+完整驗收紀錄（環境隔離做法、promotion 判定用語澄清、runtime bug 根因與修法、Safety Audit
+逐項、**v1.2 已知限制**）見 [docs/v1.2-runtime-acceptance.md](docs/v1.2-runtime-acceptance.md)。
 
 ---
 
@@ -507,19 +488,8 @@ flowchart TD
 
 `LLM` 為 OpenAI-compatible 端點，**不綁定特定供應商**；未設定時 `/api/query` 回 `503 LLM_NOT_CONFIGURED`。
 
-### 上傳與檢索資料流
-
-```
-上傳 Markdown / TXT / PDF
-  → SQLite 文件 Registry
-  → DocumentLoader / PdfLoader 解析
-  → TextSplitter 切 Chunk
-  → EmbeddingService 產生向量
-  → Qdrant 索引
-  → Retrieval（Top-K + Threshold 過濾）
-  → [RagService：雙層拒答 → LLM → Citation 驗證 → 組裝 Sources]
-  → Response
-```
+上傳、刪除、Retrieval 與 RAG 問答的逐步流程規格（含失敗回滾、Threshold 拒答、Source ID 分配
+與 Citation 驗證）見 [PROJECT_SPEC.md](PROJECT_SPEC.md) §14–§18。
 
 ---
 
@@ -612,6 +582,7 @@ docker compose ps
 | GET | `/` · `/static/*` | 簡易前端 |
 
 錯誤統一格式：`{"error": {"code": "...", "message": "...", "details": {}}}`。
+完整 request／response 範例、狀態碼與錯誤碼對照見 [PROJECT_SPEC.md](PROJECT_SPEC.md) §19、§22。
 
 ---
 
@@ -646,12 +617,13 @@ docker compose ps
 
 **Retrieval Optimizer（v1.1）**
 
-- LLM-assisted candidate generation（評估問題與證據候選提案，一律以 proposed 落庫）
-- Canonical evidence 與版本化評估資料集
+- LLM-assisted candidate generation（評估問題與證據候選提案，一律以 `proposed` 狀態落庫，
+  不會自動成為評估案例）
+- Canonical evidence 與版本化評估資料集（tune／validation／test 分割 + group leakage 檢查）
 - 隔離的 chunking／retrieval trial 與 embedding cache
-- Grid／random search、hard constraints 與 Pareto frontier 選擇
-- Identifier-aware retrieval
-- 人工審核的資料集發布流程
+- Deterministic grid／random search（**不呼叫 LLM**）、hard constraints 與 Pareto frontier 選擇
+- Identifier-aware retrieval（dense ∪ identifier 結果聯集 + exact-match boost／confusable penalty）
+- 人工審核的資料集發布流程（每次編輯、加證據或接受都產生新的遞增 revision，**不覆寫歷史**）
 - 帶防護的 apply／rollback 與 Qdrant alias 切換
 - 唯讀報表 API 與前端分頁
 - Docker CLI profile 與 Playwright E2E 覆蓋
@@ -723,6 +695,11 @@ Page Hit@1 = 1.0
 
 完整結果與 threshold sweep 見 [evaluation/results.json](evaluation/results.json)。
 
+> 上述數字來自 **v1.0 的 20 題題庫**。v1.1 另有一組 **15 案例**的 Baseline（額外加入 confusable
+> 與 unanswerable 壓力測試，Hit@1 = 0.7273、Hit@3 = 1.0），見
+> [evaluation/baseline-v1.1.md](evaluation/baseline-v1.1.md)。
+> 兩者**題庫、標註格式與難度皆不同，不可直接比較**。
+
 ---
 
 ## 測試結果
@@ -779,6 +756,19 @@ npm run test:e2e
   <img src="docs/screenshots/demo-run/05-retrieval-no-result.png" alt="無結果拒答" width="420" />
   <img src="docs/screenshots/demo-run/08-real-rag-e102.png" alt="LLM RAG（E102）" width="420" />
 </p>
+
+---
+
+## Documentation
+
+| 文件 | 內容 |
+| --- | --- |
+| [PROJECT_SPEC.md](PROJECT_SPEC.md) | v1.0 完整規格：專案目標、資料模型、解析／Chunking 規則、匯入與 RAG 流程、**完整 API request／response 與錯誤碼**、Prompt 規格、測試策略 |
+| [docs/v1.1-retrieval-optimizer-requirements.md](docs/v1.1-retrieval-optimizer-requirements.md) | v1.1 需求：FR／NFR 編號、eval case schema、Canonical Document 規則、**metrics 定義與「合理 Top-5」選擇法**、Safety Rules、Acceptance Criteria A–E |
+| [docs/v1.1-retrieval-optimizer-architecture.md](docs/v1.1-retrieval-optimizer-architecture.md) | v1.1 架構：Module 邊界、index／query／eval 資料流、Trial isolation、**Qdrant payload 與 SQLite DDL**、Apply／Rollback 與 alias migration、設計取捨表 |
+| [docs/v1.1-retrieval-optimizer-plan.md](docs/v1.1-retrieval-optimizer-plan.md) | v1.1 開發計畫 Slice 0–8：scope／測試／驗收／風險與全域禁止事項（historical） |
+| [docs/v1.2-runtime-acceptance.md](docs/v1.2-runtime-acceptance.md) | v1.2 runtime 驗收全文：環境隔離、Fake 兩輪與 Real LLM 單輪逐項紀錄、**promotion 判定用語澄清**、runtime bug 根因與修法、Safety Audit、v1.2 已知限制 |
+| [evaluation/baseline-v1.1.md](evaluation/baseline-v1.1.md) | v1.1 Slice 0 Baseline：15 案例逐題 Top-5、E102／D900 排名壓力測試、**硬限制門檻推導與可信度標註** |
 
 ---
 
