@@ -375,6 +375,7 @@ deterministic promotion gate、匿名化 Audit 與 `show` CLI、安全的 collec
 | [docs/v1.1-retrieval-optimizer-requirements.md](docs/v1.1-retrieval-optimizer-requirements.md) | **v1.1 需求**：FR／NFR、eval case schema、Canonical Document 規則、metrics 定義與「合理 Top-5」選擇法、Safety Rules、Acceptance Criteria A–E |
 | [docs/v1.1-retrieval-optimizer-plan.md](docs/v1.1-retrieval-optimizer-plan.md) | v1.1 開發計畫 Slice 0–8：scope／測試／驗收／風險與全域禁止事項（historical） |
 | [docs/developer-guide.md](docs/developer-guide.md) | **實作者指南**：環境變數全表、專案結構、前端、v1.1 optimizer CLI 與 Dataset Authoring、v1.2 agent CLI、Docker CLI profile、Optimizer UI 示範資料 |
+| [docs/api-reference.md](docs/api-reference.md) | **API Reference**：目前 main branch 的 HTTP API——23 個 registered endpoint、request／response schema、錯誤碼、Production 與 Evaluation 檢索差異 |
 | [docs/testing.md](docs/testing.md) | **測試**：測試規模與誠實度說明、pytest markers、各層級執行方式與外部依賴 |
-| [PROJECT_SPEC.md](PROJECT_SPEC.md) | v1.0 完整規格：資料模型、解析／Chunking 規則、匯入與 RAG 流程、完整 API request／response 與錯誤碼、Prompt 規格、測試策略 |
+| [PROJECT_SPEC.md](PROJECT_SPEC.md) | **v1.0 歷史規格／設計參考**：資料模型、解析／Chunking 規則、匯入與 RAG 流程、Prompt 規格、測試策略——這些部分仍具參考價值；其 §19 API 章節記錄的是 v1.0 當時狀態，**目前 HTTP API 以 [docs/api-reference.md](docs/api-reference.md) 為準** |
 | [evaluation/baseline-v1.1.md](evaluation/baseline-v1.1.md) | v1.1 Slice 0 Baseline：15 案例逐題 Top-5、E102／D900 排名壓力測試、硬限制門檻推導與可信度標註 |
