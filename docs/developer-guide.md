@@ -74,6 +74,9 @@ tests/           unit / integration / e2e（Playwright）
 前端**不含任何金鑰、不偽造回答、不使用 Fake LLM 當作 Demo 回應**；來源 metadata 一律由後端組裝。
 關鍵驗證、Threshold、拒答與引用組裝邏輯**不得**放在 JavaScript。
 
+> 詳細 HTTP API（各 endpoint 的 request／response schema、錯誤碼與實際行為）見
+> [api-reference.md](api-reference.md)。
+
 ## 4. v1.1 Optimizer CLI
 
 以下指令可在**不提供 API key** 的情況下執行 optimizer 核心流程。
@@ -161,6 +164,9 @@ Deployment Admin **預設停用**；停用時所有 write endpoint 一律回 **4
 Apply／Rollback 的完整流程、typed confirmation、alias 原子切換與稽核設計見
 [v1.1-retrieval-optimizer-architecture.md §8](v1.1-retrieval-optimizer-architecture.md#8-apply--rollback-與首次-alias-migration)
 與 [v1.1-retrieval-optimizer-requirements.md §9](v1.1-retrieval-optimizer-requirements.md#9-safety-rules)。
+
+> 詳細 HTTP API（實際註冊的 admin endpoint、request schema、error code 對照與 403／409 條件）見
+> [api-reference.md](api-reference.md#optimizer--deployment-admin)。
 
 ## 5. v1.2 Agent CLI
 
