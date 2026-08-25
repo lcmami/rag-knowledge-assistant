@@ -23,7 +23,7 @@ from evaluation.v11.retrieval.base import (
     SearchBackend,
     StrategyRetrievalOutcome,
 )
-from evaluation.v11.retrieval.config import DENSE_RANKING_VERSION
+from evaluation.v11.retrieval.rerank_stage import maybe_rerank
 
 
 class DenseRetrievalStrategy(RetrievalStrategy):
@@ -46,7 +46,11 @@ class DenseRetrievalStrategy(RetrievalStrategy):
 
         # 與 RetrievalService 相同：stable sort by vector_score desc（ties 保留後端順序）。
         admitted.sort(key=lambda c: c.vector_score, reverse=True)
-        admitted = admitted[: cfg.top_k]
+        # v1.2.1：rerank 啟用時，A 完整保留交給 rerank stage 切 window/tail；
+        # 未啟用時維持 v1.1 行為（直接截斷至 top_k），輸出 byte-identical。
+        admitted_all = admitted
+        if not getattr(cfg, "is_rerank_enabled", False):
+            admitted = admitted[: cfg.top_k]
 
         results = [
             RankedRetrievalResult(
@@ -73,11 +77,11 @@ class DenseRetrievalStrategy(RetrievalStrategy):
             for rank, c in enumerate(admitted, start=1)
         ]
 
-        return StrategyRetrievalOutcome(
+        outcome = StrategyRetrievalOutcome(
             results=results,
             query_identifiers=[],  # dense 不使用 identifier
             strategy_name=self.name,
-            ranking_version=DENSE_RANKING_VERSION,
+            ranking_version=cfg.ranking_version,
             dense_candidate_count=len(candidates),
             identifier_candidate_count=0,
             union_candidate_count=len(candidates),
@@ -87,3 +91,4 @@ class DenseRetrievalStrategy(RetrievalStrategy):
             threshold_rejected_count=rejected,
             identifier_floor_rejected_count=0,
         )
+        return maybe_rerank(outcome, request, admitted_count=len(admitted_all))
