@@ -30,6 +30,8 @@ from evaluation.v11.embedding_cache import (
 )
 from evaluation.v11.embedding_fingerprint import EmbeddingFingerprint
 from evaluation.v11.hashing import config_hash
+from evaluation.v11.rerank_cache import FingerprintedRerankCache, RerankCacheRepository
+from evaluation.v11.rerank_fingerprint import RerankFingerprint
 from evaluation.v11.retrieval_metrics import IndexChunk, RankedResult
 from evaluation.v11.run_models import TrialConfig
 from evaluation.v11.trial_collections import assert_deletable
@@ -61,6 +63,10 @@ class RealTrialServiceProvider:
         *,
         cache_db_path: Optional[str] = None,
         cache_enabled: bool = True,
+        rerank_cache_db_path: Optional[str] = None,
+        rerank_cache_enabled: bool = True,
+        rerank_model_name: Optional[str] = None,
+        reranker=None,
     ):
         self._client = client
         self._embedding = embedding
@@ -79,6 +85,24 @@ class RealTrialServiceProvider:
         self._fingerprint: Optional[EmbeddingFingerprint] = None
         self._caching: Optional[CachingDocumentEmbeddingService] = None
 
+        # --- Slice R2（v1.2.1）：rerank ------------------------------------
+        # Model 與 cache 皆為**惰性建立** —— 只有真的跑到 rerank_strategy != none 的
+        # Trial 時才會載入 cross-encoder，故既有 dense / identifier_aware run 的成本不變。
+        #
+        # ``rerank_cache_enabled=False`` 是 **uncached 量測用開關**：R2 的 end-to-end
+        # feasibility 數字一律以 uncached 量得，cached latency 只作資訊（R0/R0.5 已載明）。
+        from evaluation.v11.retrieval.config import DEFAULT_RERANK_MODEL
+
+        self._rerank_model_name = rerank_model_name or DEFAULT_RERANK_MODEL
+        self._rerank_cache_enabled = rerank_cache_enabled
+        self._rerank_cache_db_path = rerank_cache_db_path or os.path.join(
+            base_workdir, "optimizer.rerank-cache.db"
+        )
+        self._reranker = reranker  # 可注入（測試 / 重用已載入模型）
+        self._rerank_cache_repo: Optional[RerankCacheRepository] = None
+        self._rerank_cache: Optional[FingerprintedRerankCache] = None
+        self._rerank_fingerprint: Optional[RerankFingerprint] = None
+
     @classmethod
     def create(
         cls,
@@ -89,6 +113,10 @@ class RealTrialServiceProvider:
         embedding=None,
         cache_db_path: Optional[str] = None,
         cache_enabled: bool = True,
+        rerank_cache_db_path: Optional[str] = None,
+        rerank_cache_enabled: bool = True,
+        rerank_model_name: Optional[str] = None,
+        reranker=None,
     ) -> "RealTrialServiceProvider":
         from app.core.config import Settings
         from app.dependencies import create_qdrant_client
@@ -106,6 +134,10 @@ class RealTrialServiceProvider:
         return cls(
             client, embedding, base_workdir, settings,
             cache_db_path=cache_db_path, cache_enabled=cache_enabled,
+            rerank_cache_db_path=rerank_cache_db_path,
+            rerank_cache_enabled=rerank_cache_enabled,
+            rerank_model_name=rerank_model_name,
+            reranker=reranker,
         )
 
     # ------------------------------------------------------------------
@@ -122,6 +154,77 @@ class RealTrialServiceProvider:
                 enabled=self._cache_enabled,
             )
         return self._caching
+
+    # ------------------------------------------------------------------
+    # Slice R2：真實 cross-encoder reranker + 正式 SQLite rerank cache
+    # ------------------------------------------------------------------
+    def _ensure_reranker(self):
+        """惰性建立真實 :class:`CrossEncoderReranker`（整個 Run 共用一份已載入模型）。"""
+        if self._reranker is None:
+            from evaluation.v11.retrieval.reranker import CrossEncoderReranker
+
+            self._reranker = CrossEncoderReranker(self._rerank_model_name)
+        return self._reranker
+
+    def _ensure_rerank_fingerprint(self) -> RerankFingerprint:
+        """由**已載入**的 cross-encoder 建立 fingerprint（cache key 綁定於此）。
+
+        必須先觸發模型載入才能讀出 revision / num_labels / max_length / weights manifest；
+        否則 fingerprint 會退化成 ``unknown``，快取語意就不可信。
+        """
+        if self._rerank_fingerprint is None:
+            reranker = self._ensure_reranker()
+            model = reranker._ensure_model()
+            self._rerank_fingerprint, _manifest = RerankFingerprint.from_cross_encoder(
+                model, model_name=self._rerank_model_name
+            )
+        return self._rerank_fingerprint
+
+    def _ensure_rerank_cache(self) -> FingerprintedRerankCache:
+        """惰性建立正式 SQLite rerank cache（獨立檔案，不混入任何其他 DB）。
+
+        ``rerank_cache_enabled=False`` 時仍回傳 facade，但一律 miss、不寫入 ——
+        這正是 uncached end-to-end 量測所需的行為（且 miss 統計仍如實計數）。
+        """
+        if self._rerank_cache is None:
+            fingerprint = self._ensure_rerank_fingerprint()
+            if self._rerank_cache_enabled and self._rerank_cache_repo is None:
+                self._rerank_cache_repo = RerankCacheRepository(self._rerank_cache_db_path)
+            self._rerank_cache = FingerprintedRerankCache(
+                self._rerank_cache_repo,
+                fingerprint,
+                enabled=self._rerank_cache_enabled,
+            )
+        return self._rerank_cache
+
+    def rerank_stats(self) -> Optional[dict]:
+        """Run 層級 rerank 資訊（fingerprint + cache 設定）；未啟用過 rerank 時為 None。"""
+        if self._rerank_fingerprint is None:
+            return None
+        cache = self._rerank_cache
+        from evaluation.v11.retrieval.reranker import (
+            RERANK_BATCH_SIZE,
+            SCORED_ACTIVATION,
+        )
+
+        return {
+            "stats_version": "v1",
+            "rerank_model_name": self._rerank_model_name,
+            "rerank_fingerprint": self._rerank_fingerprint.to_canonical_dict(),
+            "rerank_fingerprint_hash": self._rerank_fingerprint.fingerprint_hash(),
+            # 兩個 runtime 常數（非搜尋維度，不進 config hash / cache key）。
+            "rerank_batch_size": RERANK_BATCH_SIZE,
+            "scored_activation": SCORED_ACTIVATION,
+            "rerank_cache_enabled": bool(cache.enabled) if cache else False,
+            "rerank_cache_hits": cache.hits if cache else 0,
+            "rerank_cache_misses": cache.misses if cache else 0,
+            "cache_schema_version": self._rerank_fingerprint.cache_schema_version,
+            # 誠實性註記隨產物一起走，避免脫離 runbook 後被誤讀。
+            "latency_note": (
+                "cached rerank latency is INFORMATIONAL ONLY. Feasibility must use the "
+                "uncached end-to-end p95_retrieval_latency_ms, never a cache-warmed number."
+            ),
+        }
 
     # --- provider API ---
     def build_index(
@@ -274,6 +377,11 @@ class RealTrialServiceProvider:
             raise RuntimeError(f"collection {collection_name!r} 尚未建索引。")
 
         rc = trial_config.retrieval_config_obj()
+        # Slice R2：只有真的啟用 rerank 才建構 reranker / cache（否則不載入模型）。
+        rerank_on = bool(getattr(rc, "is_rerank_enabled", False))
+        reranker = self._ensure_reranker() if rerank_on else None
+        rerank_cache = self._ensure_rerank_cache() if rerank_on else None
+
         start = time.perf_counter()
         # 每 Trial 每題算一次 query embedding（不快取，§十七.10 / §十八.11）。
         query_vector = self._embedding.embed_query(question)
@@ -285,9 +393,14 @@ class RealTrialServiceProvider:
                 query_vector=query_vector,
                 collection_name=collection_name,
                 config=rc,
+                # 注入既有 strategy dispatch —— dense / identifier_aware 共用同一條路徑。
+                reranker=reranker,
+                rerank_cache=rerank_cache,
             ),
             backend,
         )
+        # **這才是 end-to-end**：query embedding + vector search + admission + rerank
+        # + final ranking 全部在內。rerank stage 的分項時間另由 meta 提供，兩者不可相加。
         retrieval_time_ms = int((time.perf_counter() - start) * 1000)
 
         ranked = [
@@ -311,6 +424,12 @@ class RealTrialServiceProvider:
                 confusable_penalty=r.confusable_penalty,
                 candidate_sources=list(r.candidate_sources),
                 admission_reason=r.admission_reason,
+                # Slice R2：rerank 明細。未啟用時三者皆 None → 既有輸出 byte-identical。
+                rerank_score=r.rerank_score if rerank_on else None,
+                rerank_score_normalized=(
+                    r.rerank_score_normalized if rerank_on else None
+                ),
+                rerank_applied=bool(r.rerank_applied) if rerank_on else None,
             )
             for r in outcome.results
         ]

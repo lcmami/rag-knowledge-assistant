@@ -112,7 +112,7 @@ _MIGRATION_0008 = [
 ]
 
 # --------------------------------------------------------------------------
-# Deployment DB migration list = base search migrations (0001..0006) + 0008.
+# Deployment DB migration list = base search migrations + 0008.
 #
 # Global migration numbering policy (approved decision):
 #   0007 belongs to the separate review database migration namespace.
@@ -122,11 +122,19 @@ _MIGRATION_0008 = [
 #   `schema_migrations`; it makes NO assumption that IDs are contiguous, so
 #   the absence of 0007 here is never treated as a "missing migration".
 #
-# This Deployment DB therefore applies: 0001,0002,0003,0004,0005,0006,0008.
+# The base list gained 0009_rerank (v1.2.1 Slice R2), which lands AFTER this
+# module's own 0008. Concatenation alone would therefore produce the list order
+# ...,0006,0009,0008 — applied fine by the runner, but out of step with
+# `applied_migrations()` (which reads back ORDER BY version). Sorting by version
+# id keeps list order and read-back order identical, so the equality assertion
+# in the migration tests stays meaningful instead of being loosened.
+#
+# This Deployment DB therefore applies: 0001..0006, 0008, 0009.
 # --------------------------------------------------------------------------
-DEPLOY_MIGRATIONS: list[tuple[str, list[str]]] = list(_BASE_MIGRATIONS) + [
-    ("0008_deployment", _MIGRATION_0008),
-]
+DEPLOY_MIGRATIONS: list[tuple[str, list[str]]] = sorted(
+    list(_BASE_MIGRATIONS) + [("0008_deployment", _MIGRATION_0008)],
+    key=lambda item: item[0],
+)
 
 
 def _now() -> str:

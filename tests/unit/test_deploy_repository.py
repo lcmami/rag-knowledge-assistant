@@ -37,7 +37,7 @@ def _record(op_id="op1", **over) -> DeploymentRecord:
 def test_migrations_include_deployment(tmp_path):
     repo = DeploymentRepository(str(tmp_path / "x.deployment.db"))
     assert repo.applied_migrations() == [v for v, _ in DEPLOY_MIGRATIONS]
-    assert repo.applied_migrations()[-1] == "0008_deployment"
+    assert "0008_deployment" in repo.applied_migrations()
 
 
 def test_migrations_idempotent(tmp_path):
@@ -50,9 +50,9 @@ def test_migrations_idempotent(tmp_path):
 def test_migration_id_gap_is_intentional_and_not_missing(tmp_path):
     """Global migration numbering policy: 0007 lives in the review namespace.
 
-    The Deployment DB applies 0001..0006 then 0008, skipping 0007. Prove:
-      (a) the applied set is exactly {0001,0002,0003,0004,0005,0006,0008},
-          i.e. 0007 is intentionally absent (a gap, not a bug);
+    The Deployment DB applies 0001..0006, 0008 and 0009, skipping 0007. Prove:
+      (a) the applied set is exactly {0001..0006, 0008, 0009}, i.e. 0007 is
+          intentionally absent (a gap, not a bug);
       (b) re-running the migrations is idempotent and never re-applies or errors;
       (c) the runner does NOT treat the absent 0007 as a "missing migration"
           (no contiguity assumption): a fresh run over the same DB applies
@@ -65,6 +65,7 @@ def test_migration_id_gap_is_intentional_and_not_missing(tmp_path):
     applied = repo.applied_migrations()
 
     # (a) exact global-unique, non-contiguous sequence — 0007 deliberately skipped.
+    #     0009_rerank (v1.2.1 Slice R2) rides along from the base list.
     assert applied == [
         "0001_initial",
         "0002_runs_trials",
@@ -73,6 +74,7 @@ def test_migration_id_gap_is_intentional_and_not_missing(tmp_path):
         "0005_optimizer_search",
         "0006_search_outcome",
         "0008_deployment",
+        "0009_rerank",
     ]
     assert "0007_review" not in applied
     assert "0007_review_workflow" not in applied

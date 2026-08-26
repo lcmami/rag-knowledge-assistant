@@ -393,8 +393,22 @@ def _execute_trial(
         for case in dataset.cases:
             ro = provider.retrieve(collection, tc, case.question, tc.top_k)
             total_retrieval += ro.retrieval_time_ms
+            # Slice R2：rerank telemetry 走既有 meta 通道（rerank 未啟用時這些 key
+            # 根本不存在，故 .get() 全為 None，CaseRetrieval 退化成 v1.1 形狀）。
+            meta = ro.meta or {}
             case_retrievals.append(
-                CaseRetrieval(case=case, results=ro.results, latency_ms=ro.retrieval_time_ms)
+                CaseRetrieval(
+                    case=case,
+                    results=ro.results,
+                    latency_ms=ro.retrieval_time_ms,
+                    rerank_strategy=meta.get("rerank_strategy"),
+                    rerank_latency_ms=meta.get("rerank_latency_ms"),
+                    rerank_cache_hits=meta.get("rerank_cache_hits"),
+                    rerank_cache_misses=meta.get("rerank_cache_misses"),
+                    rerank_window_count=meta.get("rerank_window_count"),
+                    rerank_tail_count=meta.get("rerank_tail_count"),
+                    admitted_count=meta.get("admitted_count"),
+                )
             )
             if ro.meta:
                 retrieval_meta_by_case[case.id] = ro.meta
@@ -418,6 +432,9 @@ def _execute_trial(
         for m in evaluation.metrics:
             m.trial_id = trial.trial_id
         repo.save_trial_metrics(trial.trial_id, evaluation.metrics)
+
+        # Slice R2（migration 0009）：aggregate rerank telemetry（未啟用 rerank → None）。
+        trial.rerank_stats_json = _rerank_stats_json(provider, evaluation.case_evaluations)
 
         trial.retrieval_time_ms = total_retrieval
         trial.status = TrialStatus.COMPLETED
@@ -477,9 +494,51 @@ def _cleanup_trial_collection(
         trial.error = (trial.error + " | " + note) if trial.error else note
 
 
+def _rerank_stats_json(provider: TrialServiceProvider, cases: list) -> Optional[str]:
+    """Trial 層級 rerank telemetry（provider fingerprint + 全 case 加總）。
+
+    只在**該 Trial 真的跑過 rerank** 時回傳 JSON；否則 None，欄位維持 NULL，
+    既有 trial row 內容不變。
+
+    誠實性：``*_latency_ms`` 是資訊性 telemetry。cache 命中會讓這些數字大幅下降，
+    但 feasibility 一律以 uncached end-to-end 量測為準（見 ``latency_note``）。
+    """
+    rr = [c for c in cases if getattr(c, "rerank_enabled", False)]
+    if not rr:
+        return None
+
+    hits = sum(int(c.rerank_cache_hits or 0) for c in rr)
+    misses = sum(int(c.rerank_cache_misses or 0) for c in rr)
+    looked_up = hits + misses
+    latencies = [float(c.rerank_latency_ms or 0.0) for c in rr]
+    stats: dict[str, Any] = {
+        "rerank_case_count": len(rr),
+        "rerank_strategy": rr[0].rerank_strategy,
+        "rerank_scored_pair_count": sum(int(c.rerank_window_count or 0) for c in rr),
+        "rerank_tail_pair_count": sum(int(c.rerank_tail_count or 0) for c in rr),
+        "admitted_count_total": sum(int(c.admitted_count or 0) for c in rr),
+        "rerank_cache_hits": hits,
+        "rerank_cache_misses": misses,
+        "rerank_cache_hit_rate": round(hits / looked_up, 6) if looked_up else None,
+        "total_rerank_latency_ms": round(sum(latencies), 4),
+        "max_rerank_latency_ms": round(max(latencies), 4) if latencies else None,
+    }
+    # provider 端的 fingerprint / cache 設定（有實作才取；fake provider 無此方法）。
+    provider_stats = getattr(provider, "rerank_stats", None)
+    if callable(provider_stats):
+        extra = provider_stats()
+        if extra:
+            stats.update(extra)
+    return hashing.canonical_json(stats)
+
+
 def _case_result_row(
     trial_id: str, ce: CaseEvaluation, retrieval_meta: Optional[dict] = None
 ) -> TrialCaseResult:
+    # Slice R2（migration 0009）：per-case rerank metadata 專用欄位。
+    # 與 retrieval_meta_json 內的 rerank key **同源**（皆由 outcome.meta 導出），
+    # 故不可能漂移；獨立欄位的目的是讓 rerank telemetry 可直接查詢，不必解析整包 blob。
+    rerank_meta = ce.rerank_meta_payload()
     return TrialCaseResult(
         trial_id=trial_id,
         case_id=ce.case_id,
@@ -492,6 +551,9 @@ def _case_result_row(
         evidence_match_json=hashing.canonical_json(ce.evidence_match_payload()),
         retrieval_meta_json=(
             hashing.canonical_json(retrieval_meta) if retrieval_meta else None
+        ),
+        rerank_meta_json=(
+            hashing.canonical_json(rerank_meta) if rerank_meta else None
         ),
     )
 

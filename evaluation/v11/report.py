@@ -126,6 +126,10 @@ def build_report(
         chunk_cache_stats = (
             json.loads(t.chunk_cache_stats_json) if t.chunk_cache_stats_json else None
         )
+        # Slice R2（migration 0009）：aggregate rerank telemetry（未啟用 rerank → None）。
+        rerank_stats = (
+            json.loads(t.rerank_stats_json) if t.rerank_stats_json else None
+        )
         trial_blocks.append(
             {
                 "trial_id": t.trial_id,
@@ -145,6 +149,7 @@ def build_report(
                 "chunk_count": t.chunk_count,
                 "chunk_config_hash": t.chunk_config_hash,
                 "chunk_cache_stats": chunk_cache_stats,
+                "rerank_stats": rerank_stats,
                 "aggregate_metrics": [_metric_to_dict(m) for m in metrics if m.scope == "aggregate"],
                 "per_query_type_metrics": [
                     _metric_to_dict(m) for m in metrics if m.scope == "query_type"
@@ -162,6 +167,10 @@ def build_report(
                         # Slice 4（§十九）：identifier-aware 每題 retrieval 明細（dense 為 None）。
                         "retrieval_meta": (
                             json.loads(c.retrieval_meta_json) if c.retrieval_meta_json else None
+                        ),
+                        # Slice R2（§0009）：per-case rerank metadata（rerank 未啟用為 None）。
+                        "rerank_meta": (
+                            json.loads(c.rerank_meta_json) if c.rerank_meta_json else None
                         ),
                         "error": c.error,
                     }
@@ -245,6 +254,65 @@ def _render_chunk_cache(ap, t: dict[str, Any]) -> None:
     ap("")
 
 
+def _rerank_latency_line(t: dict[str, Any]) -> str | None:
+    """由 aggregate metrics 取 rerank latency 三數；沒有這些 metric 就不輸出該行。"""
+    wanted = ("mean_rerank_latency_ms", "p50_rerank_latency_ms", "p95_rerank_latency_ms")
+    by_name = {
+        m["metric_name"]: m for m in t.get("aggregate_metrics") or []
+        if m["metric_name"] in wanted
+    }
+    if not by_name:
+        return None
+    parts = [f"{n.replace('_rerank_latency_ms', '')}={_fmt_metric(by_name[n])}"
+             for n in wanted if n in by_name]
+    return "- Rerank Latency (ms): " + " · ".join(parts)
+
+
+def _render_rerank(ap, t: dict[str, Any]) -> None:
+    """Slice R2（v1.2.1）：rerank strategy / provenance / cache 統計 / latency。
+
+    rerank 未啟用時整段不輸出，故既有 report 內容 byte-identical。
+    **不**輸出 chunk 全文、向量、API key 或本機絕對路徑（來源 blob 本身不含）。
+    """
+    stats = t.get("rerank_stats")
+    if not stats:
+        return
+    rc = ((t.get("config") or {}).get("retrieval_config")) or {}
+    fp = stats.get("rerank_fingerprint") or {}
+
+    ap("### Cross-Encoder Rerank")
+    ap(f"- Rerank Strategy: **{stats.get('rerank_strategy')}** · "
+       f"rerank_top_n: **{rc.get('rerank_top_n')}** · "
+       f"Ranking Version: `{rc.get('ranking_version')}`")
+    ap(f"- Rerank Fingerprint: `{(stats.get('rerank_fingerprint_hash') or '')[:12]}…` "
+       f"(model=`{fp.get('model_name')}` revision=`{fp.get('model_revision')}` "
+       f"num_labels={fp.get('num_labels')} max_length={fp.get('max_length')} "
+       f"cache_schema=`{stats.get('cache_schema_version')}`)")
+    # 排序主鍵語意 —— 明寫，避免報表讀者把 normalized 當成排序依據。
+    ap(f"- Scored Activation: **{stats.get('scored_activation')}** "
+       f"（排序主鍵 = **raw logit**；normalized = sigmoid(raw)，"
+       f"**僅供閱讀 / audit，不參與排序或 tie-break**）")
+    ap(f"- Rerank Batch Size: {stats.get('rerank_batch_size')} "
+       f"（runtime 常數，不進 config hash / cache key / search space）")
+    hit_rate = stats.get("rerank_cache_hit_rate")
+    hit_rate_s = f"{hit_rate:.4f}" if isinstance(hit_rate, float) else "n/a"
+    ap(f"- Rerank Cache Enabled: **{stats.get('rerank_cache_enabled')}** · "
+       f"Hits: {stats.get('rerank_cache_hits')} · "
+       f"Misses: {stats.get('rerank_cache_misses')} · Hit Rate: {hit_rate_s}")
+    ap(f"- Scored Pairs: {stats.get('rerank_scored_pair_count')} "
+       f"(window) · {stats.get('rerank_tail_pair_count')} (tail, not scored) · "
+       f"Cases: {stats.get('rerank_case_count')}")
+    ap(f"- Rerank Time: total {stats.get('total_rerank_latency_ms')} ms · "
+       f"max/case {stats.get('max_rerank_latency_ms')} ms")
+    line = _rerank_latency_line(t)
+    if line:
+        ap(line)
+    note = stats.get("latency_note")
+    if note:
+        ap(f"- ⚠️ {note}")
+    ap("")
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     lines: list[str] = []
     ap = lines.append
@@ -282,6 +350,10 @@ def render_markdown(report: dict[str, Any]) -> str:
                          f"penalty={rc.get('confusable_penalty')} "
                          f"id_floor={rc.get('identifier_vector_floor')} "
                          f"score_threshold={rc.get('score_threshold')}")
+            # Slice R2：rerank 是正交欄位，兩個 strategy 都可能帶。
+            if rc.get("rerank_strategy"):
+                line += (f" · Rerank: **{rc.get('rerank_strategy')}** "
+                         f"top_n={rc.get('rerank_top_n')}")
             ap(line)
         ap(f"- Config Hash: `{t['config_hash']}`")
         ap(f"- Collection: `{t['collection_name']}` · Cleanup: **{t['cleanup_status']}**")
@@ -291,6 +363,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             ap(f"- Error: `{t['error']}`")
         ap("")
         _render_chunk_cache(ap, t)
+        _render_rerank(ap, t)
         ap("### Aggregate Metrics")
         ap("| metric | value |")
         ap("| --- | --- |")
@@ -324,6 +397,20 @@ def render_markdown(report: dict[str, Any]) -> str:
                    f"confusable={rm.get('confusable_candidate_count')} "
                    f"rej_thr={rm.get('threshold_rejected_count')} "
                    f"rej_floor={rm.get('identifier_floor_rejected_count')}")
+            # Slice R2：per-case rerank metadata（window/tail、cache、latency）。
+            rk = c.get("rerank_meta")
+            if rk:
+                hr = rk.get("rerank_cache_hit_rate")
+                hr_s = f"{hr:.4f}" if isinstance(hr, float) else "n/a"
+                ap(f"    - rerank: strategy=`{rk.get('rerank_strategy')}` "
+                   f"admitted={rk.get('admitted_count')} "
+                   f"window={rk.get('rerank_window_count')} "
+                   f"tail={rk.get('rerank_tail_count')} "
+                   f"latency={rk.get('rerank_latency_ms')}ms "
+                   f"cache_hit={rk.get('rerank_cache_hits')} "
+                   f"cache_miss={rk.get('rerank_cache_misses')} "
+                   f"hit_rate={hr_s} "
+                   f"ranking_key=`{rk.get('ranking_score_source')}`")
             for r in c["top_results"]:
                 ident = ",".join(r.get("identifiers") or []) or "-"
                 dup = " dup" if r.get("is_duplicate") else ""
@@ -336,6 +423,15 @@ def render_markdown(report: dict[str, Any]) -> str:
                     base += (f" | rank_score={r.get('ranking_score')} "
                              f"boost={r.get('exact_match_boost')} penalty={r.get('confusable_penalty')} "
                              f"exact=[{em}] src={srcs} admit={r.get('admission_reason')}")
+                # Slice R2 rerank provenance：raw 與 normalized 並列，並標明哪個是排序主鍵。
+                if r.get("rerank_applied") is not None:
+                    if r.get("rerank_applied"):
+                        base += (f" | rerank_raw={r.get('rerank_score')} "
+                                 f"norm={r.get('rerank_score_normalized')} "
+                                 f"(raw is the ranking key) "
+                                 f"key={r.get('ranking_score_source')}")
+                    else:
+                        base += " | rerank=tail (not scored; original order preserved)"
                 ap(base)
             em = c["evidence_match"]
             matches = em.get("matches", []) if isinstance(em, dict) else em
