@@ -644,6 +644,7 @@ Body
 | 排序分數 | 原始 vector score | `ranking_score = vector_score + exact_match_boost − confusable_penalty` |
 | Threshold | 單一 `RETRIEVAL_SCORE_THRESHOLD`（0.55） | 雙層：exact identifier 命中用較低的 `identifier_vector_floor`，其餘用一般 threshold |
 | 同分處理 | 依 Qdrant 回傳順序的穩定排序 | 5 鍵 deterministic tiebreak |
+| Cross-Encoder rerank | **無** —— `/api/retrieve` 不做 rerank | **選用**（v1.2.1）：`rerank_strategy=cross_encoder` 時，於 admission 之後對 `A[:rerank_top_n]` 以 raw logit 重排 |
 | 對外欄位 | 固定 8 欄 | 另含 evidence / relevance 判定所需欄位 |
 
 要點：
@@ -651,6 +652,12 @@ Body
 - `identifier_aware` 策略**在 production 沒有對應實作**；其 boost / penalty / 雙層 admission
   等行為**不會**出現在 `/api/retrieve`。當查詢不含 identifier 時，該策略會退化為與 dense 相同的行為，
   這也是兩者可比較的前提。
+- **Cross-Encoder rerank 只存在於 evaluation 層**（v1.2.1，`rerank_strategy` /
+  `rerank_top_n`，模型 `BAAI/bge-reranker-base`）。`/api/retrieve` 與 `/api/query`
+  **不支援、也不執行 rerank**，其排序仍完全由 raw vector score 決定。
+  rerank 位於 admission **之後**，不具 admission 或過濾權限（結構性保證，見
+  [v1.2.1 rerank design](v1.2.1-rerank-design.md)）。該能力在既有 86 ms latency
+  constraint 下不具 production 可行性，且品質改善尚未正式成立。
 - Production 目前可調的檢索參數只有 `top_k`、`RETRIEVAL_SCORE_THRESHOLD`
   與候選數策略；`strategy`、`exact_match_boost`、`confusable_penalty`、`identifier_vector_floor`
   等**僅存在於離線設定**。

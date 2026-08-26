@@ -65,6 +65,13 @@ ALLOWED_RETRIEVAL_SEARCH_KEYS = (
     "exact_match_boost",
     "confusable_penalty",
     "identifier_vector_floor",
+    # --- v1.2.1 Slice R3：rerank（與 strategy 正交，不是第三個 strategy）---
+    # `rerank_strategy` 可搜尋（none vs cross_encoder 正是要比較的對象）。
+    # `rerank_top_n` 技術上可搜尋，但 **R0.5 已 FROZEN 為 5**：它由 candidate coverage
+    # audit（tune + validation）選出，不是效能調參旋鈕。此處放行只是為了讓 search config
+    # 能明示寫出 `[5]`，**不代表核准對它做多值掃描**。
+    "rerank_strategy",
+    "rerank_top_n",
 )
 
 #: §7 明確**不得**搜尋的欄位（固定版本資訊，不是搜尋參數）。給出精準錯誤訊息。
@@ -81,6 +88,9 @@ FORBIDDEN_SEARCH_KEYS = {
     "gain_mapping": "gain mapping 屬 MetricConfig 版本資訊，不是搜尋參數",
     "ndcg_variant": "NDCG variant 屬 MetricConfig 版本資訊，不是搜尋參數",
     "ndcg_gains": "NDCG gains 屬 MetricConfig 版本資訊，不是搜尋參數",
+    # v1.2.1 §R3：比照 embedding_model —— 換 reranker 等於換 fingerprint、換 baseline，
+    # 是版本決策而非候選比較。R0 已把 BAAI/bge-reranker-base 與其 revision 鎖進 fingerprint。
+    "rerank_model": "rerank model 為固定版本資訊（換模型＝換 fingerprint＝換 baseline），不是搜尋參數",
 }
 
 
