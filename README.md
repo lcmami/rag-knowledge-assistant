@@ -305,7 +305,10 @@ deterministic promotion gate、匿名化 Audit 與 `show` CLI、安全的 collec
 
 **v1.0 RAG**
 
-1. 目前是純向量 Retrieval baseline（尚未加入 keyword / hybrid / reranker）。
+1. Production retrieval 目前是純向量 baseline（未加入 keyword / hybrid / reranker）。
+   **離線 evaluation 層自 v1.2.1 起具備 Cross-Encoder reranking，但 production
+   `/api/retrieve` 維持 dense-only，未使用 reranker**（見
+   [v1.2.1 rerank design](docs/v1.2.1-rerank-design.md)）。
 2. 語意相近但代碼不同的警報文件，可能干擾精確代碼查詢的排序。
 3. 外部 Provider 已驗證正常回答與第一層 Threshold 拒答；**第二層語意拒答已由測試覆蓋，
    但本次 CX-500 查詢在第一層就被擋下，尚未以外部 Provider 實際走過該分支**。
@@ -318,7 +321,8 @@ deterministic promotion gate、匿名化 Audit 與 `show` CLI、安全的 collec
    8 個可行候選在品質指標上完全相同，目前推薦實際上由單次 latency 差異決定；
    `eval-e102-001` 的 first relevant rank 在 baseline 與推薦設定中皆為 2。
 7. P95 latency 受單機環境與執行順序影響，hard constraint 低於本機量測雜訊底限。
-8. 尚未提供 RBAC、多人審核或背景工作佇列；未實作 BM25、sparse／hybrid、reranker 或完整 active sampling。
+8. 尚未提供 RBAC、多人審核或背景工作佇列；未實作 BM25、sparse／hybrid 或完整 active sampling。
+   （Cross-Encoder reranker 已於 v1.2.1 實作於**離線 evaluation 層**，未進 production。）
 9. 管理介面定位為 single-machine local admin，**不建議直接暴露至公開網路**。
 
 **v1.2 Agent**
@@ -329,6 +333,18 @@ deterministic promotion gate、匿名化 Audit 與 `show` CLI、安全的 collec
     `not_evaluated`（held-out test 與 recommendation lock 不在 Emergency MVP 範圍）。
 12. 目前只有最小 Audit（完整 resume 與報表 UI 為 deferred）；單一 provider／model 的一次執行
     不足以證明跨模型穩健性；token usage 可能為 null。
+
+**v1.2.1 Cross-Encoder Rerank（離線評估層）**
+
+13. 僅存在於離線 evaluation／optimizer 層；**production `/api/retrieve` 未使用 reranker，
+    維持 dense-only**。
+14. 品質改善**尚未正式成立**：tune／validation split 已飽和（各 arm 的 MRR／recall@1
+    皆為 1.0，無鑑別力），而顯示出改善的 test split 已於 R0.5 被檢視，不再是 blind holdout。
+    結論為「訊號有前景，但未經證實」。
+15. 在既有 86 ms SLO 下不具 production latency 可行性：實測 `p95_retrieval_latency_ms`
+    為 866.47 ms（`dense+CE`，n=30、cache 停用、local native-Qdrant loopback），約 10.08×。
+    Loopback RTT 比遠端部署便宜，可能低估遠端延遲。
+16. 未評估任何最佳化路徑（ONNX／OpenVINO／量化／換模型／GPU）。
 
 **共通**：所有結果僅適用於受版控的示範語料，不代表已找到全域最佳參數，也尚未經過生產環境驗證。
 範例文件皆為作品集示範所建立的**虛構資料**，不代表任何真實公司或設備。

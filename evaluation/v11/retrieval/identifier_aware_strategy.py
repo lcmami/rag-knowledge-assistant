@@ -33,8 +33,8 @@ from evaluation.v11.retrieval.base import (
     SearchBackend,
     StrategyRetrievalOutcome,
 )
-from evaluation.v11.retrieval.config import IDENTIFIER_AWARE_RANKING_VERSION
 from evaluation.v11.retrieval.dense_strategy import DenseRetrievalStrategy
+from evaluation.v11.retrieval.rerank_stage import maybe_rerank
 
 # 兩次查詢對同一 point 的 raw vector_score 若有極小浮點差異，超過此值才記 warning（§十二.3）。
 _SCORE_EPSILON = 1e-6
@@ -56,12 +56,14 @@ class IdentifierAwareRetrievalStrategy(RetrievalStrategy):
 
         # --- 無 identifier → 退化為 dense 等價（§十.7 / §21.4）---
         if not query_id_set:
+            # dense 內部已自行套用 rerank（若啟用），此處只需原樣承接其結果與統計，
+            # 不得重複 rerank，也不得把 rerank 統計丟掉。
             dense = DenseRetrievalStrategy().retrieve(request, backend)
             return StrategyRetrievalOutcome(
                 results=dense.results,
                 query_identifiers=[],
                 strategy_name=self.name,
-                ranking_version=IDENTIFIER_AWARE_RANKING_VERSION,
+                ranking_version=cfg.ranking_version,
                 dense_candidate_count=dense.dense_candidate_count,
                 identifier_candidate_count=0,
                 union_candidate_count=dense.union_candidate_count,
@@ -70,6 +72,13 @@ class IdentifierAwareRetrievalStrategy(RetrievalStrategy):
                 confusable_candidate_count=0,
                 threshold_rejected_count=dense.threshold_rejected_count,
                 identifier_floor_rejected_count=0,
+                rerank_strategy=dense.rerank_strategy,
+                admitted_count=dense.admitted_count,
+                rerank_window_count=dense.rerank_window_count,
+                rerank_tail_count=dense.rerank_tail_count,
+                rerank_latency_ms=dense.rerank_latency_ms,
+                rerank_cache_hits=dense.rerank_cache_hits,
+                rerank_cache_misses=dense.rerank_cache_misses,
             )
 
         # --- 1. Dense candidates（§十一.1）---
@@ -135,7 +144,11 @@ class IdentifierAwareRetrievalStrategy(RetrievalStrategy):
 
         # --- 5. Deterministic ranking（§十六）→ Top-K ---
         admitted.sort(key=_ranking_key)
-        admitted = admitted[: cfg.top_k]
+        # v1.2.1：rerank 啟用時，A 完整保留交給 rerank stage 切 window/tail；
+        # 未啟用時維持 v1.1 行為（直接截斷至 top_k），輸出 byte-identical。
+        admitted_count = len(admitted)
+        if not getattr(cfg, "is_rerank_enabled", False):
+            admitted = admitted[: cfg.top_k]
 
         results = [
             RankedRetrievalResult(
@@ -162,11 +175,11 @@ class IdentifierAwareRetrievalStrategy(RetrievalStrategy):
             for rank, s in enumerate(admitted, start=1)
         ]
 
-        return StrategyRetrievalOutcome(
+        outcome = StrategyRetrievalOutcome(
             results=results,
             query_identifiers=list(query_ids),
             strategy_name=self.name,
-            ranking_version=IDENTIFIER_AWARE_RANKING_VERSION,
+            ranking_version=cfg.ranking_version,
             dense_candidate_count=len(dense_candidates),
             identifier_candidate_count=len(identifier_candidates),
             union_candidate_count=len(dense_candidates) + len(identifier_candidates),
@@ -177,6 +190,7 @@ class IdentifierAwareRetrievalStrategy(RetrievalStrategy):
             identifier_floor_rejected_count=rejected_floor,
             warnings=warnings,
         )
+        return maybe_rerank(outcome, request, admitted_count=admitted_count)
 
     # ------------------------------------------------------------------
     def _union(

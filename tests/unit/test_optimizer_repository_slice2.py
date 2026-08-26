@@ -38,7 +38,8 @@ def _trial(trial_id="t1", run_id="r1", ordinal=0, config_hash="h1", **over) -> R
 def test_migration_0002_applied(tmp_path):
     repo = _repo(tmp_path)
     # Slice 3 追加 0003_chunk_cache_stats；Slice 4 追加 0004_retrieval_meta；
-    # Slice 5 追加 0005_optimizer_search（0001/0002 不變）。
+    # Slice 5 追加 0005_optimizer_search（0001/0002 不變）；
+    # v1.2.1 Slice R2 追加 0009_rerank。
     assert repo.applied_migrations() == [
         "0001_initial",
         "0002_runs_trials",
@@ -46,6 +47,7 @@ def test_migration_0002_applied(tmp_path):
         "0004_retrieval_meta",
         "0005_optimizer_search",
         "0006_search_outcome",
+        "0009_rerank",
     ]
 
 

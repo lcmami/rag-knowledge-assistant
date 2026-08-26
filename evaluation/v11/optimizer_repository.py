@@ -271,6 +271,28 @@ _MIGRATION_0006 = [
     "ALTER TABLE optimizer_searches ADD COLUMN outcome_json TEXT",
 ]
 
+# --------------------------------------------------------------------------
+# v1.2.1 Slice R2（migration 0009）：Cross-Encoder rerank telemetry（additive）。
+#
+# 為何跳號到 0009：全域 migration 編號政策（既有已核准決定）—— 0007 屬 review DB
+# namespace、0008 屬 deployment DB namespace。編號**全域唯一但不要求各 DB 連號**，
+# `run_migrations` 只依 list 順序套用尚未記錄的版本，從不假設連號，故此處缺 0007/0008
+# 不構成「缺漏 migration」。base optimizer DB 因此套用：0001..0006 + 0009。
+#
+# 兩欄，皆為純追加、舊 row 以 NULL 退化：
+# - trial_case_results.rerank_meta_json：**per-case** rerank metadata。與 0004 的
+#   retrieval_meta_json 同源（皆由 outcome.meta 導出），獨立成欄是為了可直接查詢。
+# - retrieval_trials.rerank_stats_json：**aggregate** rerank telemetry
+#   （fingerprint / cache hit-miss / 加總 latency）。
+#
+# 誠實性：其中所有 latency 皆為資訊性。cache 命中會壓低這些數字，**不得**用來宣稱
+# feasibility —— feasibility 一律以 uncached end-to-end p95_retrieval_latency_ms 為準。
+# --------------------------------------------------------------------------
+_MIGRATION_0009 = [
+    "ALTER TABLE trial_case_results ADD COLUMN rerank_meta_json TEXT",
+    "ALTER TABLE retrieval_trials ADD COLUMN rerank_stats_json TEXT",
+]
+
 # (version, [statements])
 MIGRATIONS: list[tuple[str, list[str]]] = [
     ("0001_initial", _MIGRATION_0001),
@@ -279,6 +301,7 @@ MIGRATIONS: list[tuple[str, list[str]]] = [
     ("0004_retrieval_meta", _MIGRATION_0004),
     ("0005_optimizer_search", _MIGRATION_0005),
     ("0006_search_outcome", _MIGRATION_0006),
+    ("0009_rerank", _MIGRATION_0009),
 ]
 
 _SCHEMA_MIGRATIONS_DDL = """
@@ -561,6 +584,8 @@ class OptimizerRepository:
         "index_build_time_ms", "retrieval_time_ms", "point_count", "cleanup_status",
         "error", "attempt_count",
         "strategy", "chunk_config_hash", "chunk_count", "chunk_cache_stats_json",
+        # Slice R2（0009）：aggregate rerank telemetry；未啟用 rerank 時為 NULL。
+        "rerank_stats_json",
     )
 
     def upsert_trial(self, trial: RetrievalTrial) -> None:
@@ -573,6 +598,7 @@ class OptimizerRepository:
             trial.error, trial.attempt_count,
             trial.strategy, trial.chunk_config_hash, trial.chunk_count,
             trial.chunk_cache_stats_json,
+            trial.rerank_stats_json,
         )
         placeholders = ",".join("?" for _ in self._TRIAL_COLUMNS)
         updates = ",".join(f"{c}=excluded.{c}" for c in self._TRIAL_COLUMNS if c != "trial_id")
@@ -609,11 +635,12 @@ class OptimizerRepository:
             chunk_config_hash=self._row_get(row, "chunk_config_hash"),
             chunk_count=self._row_get(row, "chunk_count"),
             chunk_cache_stats_json=self._row_get(row, "chunk_cache_stats_json"),
+            rerank_stats_json=self._row_get(row, "rerank_stats_json"),
         )
 
     @staticmethod
     def _row_get(row: sqlite3.Row, key: str):
-        """安全讀取欄位（舊 row 缺 Slice 3 欄位時回 None，向後相容）。"""
+        """安全讀取欄位（舊 row 缺 Slice 3 / R2 欄位時回 None，向後相容）。"""
         try:
             return row[key]
         except (IndexError, KeyError):
@@ -740,14 +767,15 @@ class OptimizerRepository:
                     INSERT INTO trial_case_results
                         (trial_id, case_id, case_status, query_type, answerable,
                          latency_ms, first_relevant_rank, top_results_json,
-                         evidence_match_json, error, retrieval_meta_json)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         evidence_match_json, error, retrieval_meta_json,
+                         rerank_meta_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         trial_id, c.case_id, c.case_status, c.query_type,
                         1 if c.answerable else 0, c.latency_ms, c.first_relevant_rank,
                         c.top_results_json, c.evidence_match_json, c.error,
-                        c.retrieval_meta_json,
+                        c.retrieval_meta_json, c.rerank_meta_json,
                     ),
                 )
             conn.execute("COMMIT")
@@ -780,6 +808,9 @@ class OptimizerRepository:
                 error=r["error"],
                 retrieval_meta_json=(
                     r["retrieval_meta_json"] if "retrieval_meta_json" in r.keys() else None
+                ),
+                rerank_meta_json=(
+                    r["rerank_meta_json"] if "rerank_meta_json" in r.keys() else None
                 ),
             )
             for r in rows

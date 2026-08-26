@@ -54,15 +54,37 @@ class RankedResult:
     confusable_penalty: Optional[float] = None
     candidate_sources: list[str] = field(default_factory=list)
     admission_reason: Optional[str] = None
+    # --- Slice R2（v1.2.1）：cross-encoder rerank 明細 ---
+    # 三者一律**同時**為 None（rerank 未啟用）或**同時**有值（已啟用）。
+    # ``rerank_applied`` 區分 window W（True，有 rerank_score）與 tail T（False，無分數）。
+    #: raw cross-encoder logit —— 啟用 rerank 時這就是 ranking_score 的來源。
+    rerank_score: Optional[float] = None
+    #: ``sigmoid(rerank_score)``。**僅供閱讀 / audit，不參與排序或 tie-break**。
+    rerank_score_normalized: Optional[float] = None
+    #: 是否落在 rerank window 內。None = 該 trial 未啟用 rerank。
+    rerank_applied: Optional[bool] = None
 
 
 @dataclass
 class CaseRetrieval:
-    """一個 case 的檢索輸出（排序後結果 + latency）。"""
+    """一個 case 的檢索輸出（排序後結果 + latency）。
+
+    ``latency_ms`` 是**整條 retrieve() 的 end-to-end 時間**（含 rerank）；
+    ``rerank_latency_ms`` 是其中花在 rerank stage 的部分，兩者不可相加。
+    rerank 未啟用時所有 ``rerank_*`` 欄位皆為 None，既有行為完全不變。
+    """
 
     case: EvaluationCaseV11
     results: list[RankedResult]
     latency_ms: int
+    # --- Slice R2（v1.2.1）：per-case rerank telemetry（None → 未啟用）---
+    rerank_strategy: Optional[str] = None
+    rerank_latency_ms: Optional[float] = None
+    rerank_cache_hits: Optional[int] = None
+    rerank_cache_misses: Optional[int] = None
+    rerank_window_count: Optional[int] = None
+    rerank_tail_count: Optional[int] = None
+    admitted_count: Optional[int] = None
 
 
 @dataclass
@@ -122,6 +144,43 @@ class CaseEvaluation:
     scored: list[ScoredResult]
     # trial_index_gold NDCG 明細（evaluate_trial 於取得 index_universe 後回填）。
     ndcg: Optional[dict[str, Any]] = None
+    # --- Slice R2（v1.2.1）：per-case rerank telemetry（由 CaseRetrieval 帶入）---
+    rerank_strategy: Optional[str] = None
+    rerank_latency_ms: Optional[float] = None
+    rerank_cache_hits: Optional[int] = None
+    rerank_cache_misses: Optional[int] = None
+    rerank_window_count: Optional[int] = None
+    rerank_tail_count: Optional[int] = None
+    admitted_count: Optional[int] = None
+
+    @property
+    def rerank_enabled(self) -> bool:
+        return self.rerank_strategy is not None
+
+    def rerank_meta_payload(self) -> Optional[dict[str, Any]]:
+        """per-case rerank metadata（migration 0009 專用欄位）。
+
+        rerank 未啟用時回傳 None —— 該欄位維持 NULL，既有 row 內容完全不變。
+        """
+        if not self.rerank_enabled:
+            return None
+        hits = self.rerank_cache_hits or 0
+        misses = self.rerank_cache_misses or 0
+        looked_up = hits + misses
+        return {
+            "rerank_strategy": self.rerank_strategy,
+            "admitted_count": self.admitted_count,
+            "rerank_window_count": self.rerank_window_count,
+            "rerank_tail_count": self.rerank_tail_count,
+            "rerank_latency_ms": round(float(self.rerank_latency_ms or 0.0), 4),
+            "rerank_cache_hits": hits,
+            "rerank_cache_misses": misses,
+            "rerank_cache_hit_rate": (
+                round(hits / looked_up, 6) if looked_up else None
+            ),
+            # 排序主鍵語意 —— 讓報表讀者不必回查程式碼即可知道排的是 raw logit。
+            "ranking_score_source": "rerank_raw_logit",
+        }
 
     # 供 trial_case_results 持久化
     def top_results_payload(self) -> list[dict[str, Any]]:
@@ -151,6 +210,21 @@ class CaseEvaluation:
                 item["confusable_penalty"] = r.confusable_penalty
                 item["candidate_sources"] = list(r.candidate_sources)
                 item["admission_reason"] = r.admission_reason
+            # Slice R2 rerank provenance（rerank 未啟用時 rerank_applied 為 None → 不輸出）。
+            # raw/normalized 並列，並明寫排序主鍵是哪一個，避免日後誤讀 normalized 為排序依據。
+            if r.rerank_applied is not None:
+                item["rerank_applied"] = bool(r.rerank_applied)
+                item["rerank_score"] = (
+                    round(r.rerank_score, 6) if r.rerank_score is not None else None
+                )
+                item["rerank_score_normalized"] = (
+                    round(r.rerank_score_normalized, 6)
+                    if r.rerank_score_normalized is not None
+                    else None
+                )
+                item["ranking_score_source"] = (
+                    "rerank_raw_logit" if r.rerank_applied else "vector_ranking_score"
+                )
             out.append(item)
         return out
 
@@ -212,6 +286,14 @@ def score_case(
         first_relevant_rank=first_relevant_rank,
         case_status=case_status,
         scored=scored,
+        # Slice R2：telemetry 原樣帶入，不在此加工（未啟用時全為 None）。
+        rerank_strategy=cr.rerank_strategy,
+        rerank_latency_ms=cr.rerank_latency_ms,
+        rerank_cache_hits=cr.rerank_cache_hits,
+        rerank_cache_misses=cr.rerank_cache_misses,
+        rerank_window_count=cr.rerank_window_count,
+        rerank_tail_count=cr.rerank_tail_count,
+        admitted_count=cr.admitted_count,
     )
 
 
@@ -748,6 +830,9 @@ def evaluate_trial(
                                sample_count=n_cases, computable=bool(latencies),
                                not_computable_reason=None if latencies else "no_cases"))
 
+    # --- Slice R2（v1.2.1）：rerank latency + cache telemetry ---
+    metrics.extend(_rerank_metrics(scored_cases))
+
     # --- Index point count / build time（trial 層級，由 runner 提供）---
     if point_count is not None:
         metrics.append(TrialMetric(trial_id="", metric_name="index_point_count",
@@ -767,6 +852,53 @@ def evaluate_trial(
     metrics.extend(_per_query_type_metrics(scored_cases, cfg))
 
     return TrialEvaluation(case_evaluations=scored_cases, metrics=metrics)
+
+
+def _rerank_metrics(cases: list[CaseEvaluation]) -> list[TrialMetric]:
+    """Slice R2：rerank latency 分佈 + cache hit/miss telemetry。
+
+    **只在該 trial 實際啟用 rerank 時才產生任何 metric row。** 未啟用時回傳空 list，
+    故既有 trial 的 ``trial_metrics`` 內容與 v1.1 完全相同（不會多出 n/a 列）。
+
+    誠實性約束（R0/R0.5 已載明，此處以程式重述）：
+    ``*_rerank_latency_ms`` 以及 cache hit rate 皆為 **資訊性** telemetry。
+    cached latency **不得**被當成 feasibility 依據 —— feasibility 一律以 uncached
+    end-to-end ``p95_retrieval_latency_ms`` 為準。
+    """
+    rr = [c for c in cases if c.rerank_enabled]
+    if not rr:
+        return []
+
+    lat = [float(c.rerank_latency_ms or 0.0) for c in rr]
+    n = len(rr)
+    hits = sum(int(c.rerank_cache_hits or 0) for c in rr)
+    misses = sum(int(c.rerank_cache_misses or 0) for c in rr)
+    looked_up = hits + misses
+    windows = sum(int(c.rerank_window_count or 0) for c in rr)
+
+    out = [
+        _metric("mean_rerank_latency_ms", sum(lat), float(n), computable=True),
+        TrialMetric(trial_id="", metric_name="p50_rerank_latency_ms", scope="aggregate",
+                    query_type=None, value=round(_percentile(lat, 0.50), 4),
+                    sample_count=n, computable=True),
+        TrialMetric(trial_id="", metric_name="p95_rerank_latency_ms", scope="aggregate",
+                    query_type=None, value=round(_percentile(lat, 0.95), 4),
+                    sample_count=n, computable=True),
+        # --- cache telemetry（資訊性；不得作 feasibility constraint）---
+        _count_metric("rerank_cache_hit_count", hits, sample_count=n,
+                      computable=True, reason=""),
+        _count_metric("rerank_cache_miss_count", misses, sample_count=n,
+                      computable=True, reason=""),
+        _metric("rerank_cache_hit_rate", float(hits), float(looked_up),
+                sample_count=n, computable=bool(looked_up),
+                reason="no_rerank_cache_lookups"),
+        # window 規模 —— 讓 latency 數字可被還原成「幾個 pair 的成本」。
+        _count_metric("rerank_scored_pair_count", windows, sample_count=n,
+                      computable=True, reason=""),
+        _count_metric("rerank_case_count", n, sample_count=len(cases),
+                      computable=True, reason=""),
+    ]
+    return out
 
 
 def _per_query_type_metrics(cases: list[CaseEvaluation], cfg: MetricConfig) -> list[TrialMetric]:

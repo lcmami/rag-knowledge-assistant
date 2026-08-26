@@ -22,8 +22,21 @@ confusable_penalty           拒絕   用
 identifier_vector_floor      拒絕   用
 ===========================  =====  ================
 
-``ranking_version`` 為衍生常數（依 strategy 版本化，§八.13）：canonical dict 一律以 strategy
-對應版本寫入；若使用者提供且與該版本不符即報錯（§六.12 不默默忽略）。
+**v1.2.1 rerank 為正交欄位**（與 strategy 無關，dense / identifier_aware 皆可搭配）：
+
+========================  ==========  =========================
+field                     none        cross_encoder
+========================  ==========  =========================
+rerank_strategy           用（預設）  用
+rerank_top_n              拒絕        用（預設 5，須 >= top_k）
+========================  ==========  =========================
+
+``ranking_version`` 為 (strategy, rerank_strategy) 的衍生常數（§八.13）：canonical dict
+一律以對應版本寫入；若使用者提供且不符即報錯（§六.12 不默默忽略）。
+
+**回溯相容硬需求**：``rerank_strategy=none`` 時 :meth:`RetrievalConfig.to_canonical_dict`
+的輸出與 v1.1 **byte-identical**（不輸出任何 rerank 欄位、``ranking_version`` 不變），
+故所有既有 config hash、dataset、baseline 與已 locked 的推薦全部維持有效。
 """
 from __future__ import annotations
 
@@ -38,9 +51,22 @@ STRATEGY_IDENTIFIER_AWARE = "identifier_aware"
 
 SUPPORTED_STRATEGIES = (STRATEGY_DENSE, STRATEGY_IDENTIFIER_AWARE)
 
+# --- v1.2.1 rerank（正交於 strategy，非第三個 strategy）---------------------
+RERANK_NONE = "none"
+RERANK_CROSS_ENCODER = "cross_encoder"
+SUPPORTED_RERANK_STRATEGIES = (RERANK_NONE, RERANK_CROSS_ENCODER)
+
+#: rerank model 是**固定版本資訊,不是搜尋維度**（比照 embedding_model）。
+#: 換模型 = 換 fingerprint = 換 baseline,不是候選比較。
+DEFAULT_RERANK_MODEL = "BAAI/bge-reranker-base"
+
+#: R0.5 candidate coverage audit（tune + validation only）選出並 FROZEN 的 window。
+DEFAULT_RERANK_TOP_N = 5
+
 # Ranking 演算法版本（§八.13 / §十六）：任一 strategy 的 ranking 邏輯變更須 bump。
 DENSE_RANKING_VERSION = "dense_v1"
 IDENTIFIER_AWARE_RANKING_VERSION = "identifier_aware_v1"
+CROSS_ENCODER_RANKING_SUFFIX = "+cross_encoder_v1"
 
 _RANKING_VERSION_BY_STRATEGY = {
     STRATEGY_DENSE: DENSE_RANKING_VERSION,
@@ -58,8 +84,17 @@ _IDENTIFIER_FIELDS = (
 # 共用欄位。
 _COMMON_FIELDS = ("top_k", "score_threshold", "candidate_multiplier", "candidate_cap")
 
+#: rerank 專屬欄位（``rerank_strategy=none`` 時若出現即拒絕，比照 _IDENTIFIER_FIELDS）。
+_RERANK_ONLY_FIELDS = ("rerank_top_n",)
+
 _META_KEYS = {"schema_version", "strategy", "ranking_version"}
-_ALLOWED_KEYS = _META_KEYS | set(_COMMON_FIELDS) | set(_IDENTIFIER_FIELDS)
+_ALLOWED_KEYS = (
+    _META_KEYS
+    | set(_COMMON_FIELDS)
+    | set(_IDENTIFIER_FIELDS)
+    | {"rerank_strategy"}
+    | set(_RERANK_ONLY_FIELDS)
+)
 
 # identifier_aware 預設值（Slice 4 明確；Slice 5 才做搜尋/最佳化）。
 _DEFAULTS: dict[str, Any] = {
@@ -109,15 +144,29 @@ class RetrievalConfig:
     exact_match_boost: float | None = None
     confusable_penalty: float | None = None
     identifier_vector_floor: float | None = None
+    # v1.2.1 rerank（正交欄位；none 時不輸出於 canonical dict，故舊 hash 不變）。
+    rerank_strategy: str = RERANK_NONE
+    rerank_top_n: int | None = None
     schema_version: str = RETRIEVAL_CONFIG_SCHEMA_VERSION
 
     @property
     def ranking_version(self) -> str:
-        return _RANKING_VERSION_BY_STRATEGY[self.strategy]
+        """(strategy, rerank_strategy) 的衍生常數。
+
+        ``rerank_strategy=none`` 時**與 v1.1 完全相同**，確保既有 config hash 不變。
+        """
+        base = _RANKING_VERSION_BY_STRATEGY[self.strategy]
+        if self.rerank_strategy == RERANK_CROSS_ENCODER:
+            return base + CROSS_ENCODER_RANKING_SUFFIX
+        return base
 
     @property
     def is_identifier_aware(self) -> bool:
         return self.strategy == STRATEGY_IDENTIFIER_AWARE
+
+    @property
+    def is_rerank_enabled(self) -> bool:
+        return self.rerank_strategy != RERANK_NONE
 
     def candidate_limit(self, top_k: int | None = None) -> int:
         """Dense 候選數（§十一.1）：沿用既有公式 max(top_k, min(top_k*mult, cap))。"""
@@ -153,13 +202,31 @@ class RetrievalConfig:
                     f"請改用 strategy=identifier_aware 或移除。"
                 )
 
-        # §八.13：ranking_version 為 strategy 衍生常數；若提供且不符即拒絕。
+        # --- v1.2.1 rerank（正交欄位）---
+        rerank_strategy = raw.get("rerank_strategy", RERANK_NONE)
+        if rerank_strategy not in SUPPORTED_RERANK_STRATEGIES:
+            raise RetrievalConfigError(
+                f"不支援的 rerank_strategy={rerank_strategy!r}；"
+                f"支援：{list(SUPPORTED_RERANK_STRATEGIES)}。"
+            )
+        # 比照 §八.11：不適用的欄位必須**明確拒絕**，不得默默忽略。
+        if rerank_strategy == RERANK_NONE:
+            present = [k for k in _RERANK_ONLY_FIELDS if k in raw]
+            if present:
+                raise RetrievalConfigError(
+                    f"rerank_strategy=none 不適用 rerank 欄位 {present}；"
+                    f"請設 rerank_strategy={RERANK_CROSS_ENCODER!r} 或移除。"
+                )
+
+        # §八.13：ranking_version 為 (strategy, rerank_strategy) 衍生常數；不符即拒絕。
         expected_rv = _RANKING_VERSION_BY_STRATEGY[strategy]
+        if rerank_strategy == RERANK_CROSS_ENCODER:
+            expected_rv += CROSS_ENCODER_RANKING_SUFFIX
         provided_rv = raw.get("ranking_version")
         if provided_rv is not None and provided_rv != expected_rv:
             raise RetrievalConfigError(
-                f"strategy={strategy!r} 的 ranking_version 必須為 {expected_rv!r}，"
-                f"得到 {provided_rv!r}（不得覆寫）。"
+                f"strategy={strategy!r} / rerank_strategy={rerank_strategy!r} 的 "
+                f"ranking_version 必須為 {expected_rv!r}，得到 {provided_rv!r}（不得覆寫）。"
             )
 
         top_k = _positive_int("top_k", raw.get("top_k", _DEFAULTS["top_k"]))
@@ -198,6 +265,17 @@ class RetrievalConfig:
             if penalty < 0:
                 raise RetrievalConfigError("confusable_penalty 不得為負。")
 
+        rerank_top_n = None
+        if rerank_strategy == RERANK_CROSS_ENCODER:
+            rerank_top_n = _positive_int(
+                "rerank_top_n", raw.get("rerank_top_n", DEFAULT_RERANK_TOP_N)
+            )
+            # W/T 語義要求 window 至少涵蓋最終輸出，否則 tail 會擠掉被 rerank 的結果。
+            if rerank_top_n < top_k:
+                raise RetrievalConfigError(
+                    f"rerank_top_n ({rerank_top_n}) 必須 >= top_k ({top_k})。"
+                )
+
         return cls(
             strategy=strategy,
             top_k=top_k,
@@ -208,6 +286,8 @@ class RetrievalConfig:
             exact_match_boost=boost,
             confusable_penalty=penalty,
             identifier_vector_floor=floor,
+            rerank_strategy=rerank_strategy,
+            rerank_top_n=rerank_top_n,
             schema_version=str(raw.get("schema_version", RETRIEVAL_CONFIG_SCHEMA_VERSION)),
         )
 
@@ -232,4 +312,10 @@ class RetrievalConfig:
             d["exact_match_boost"] = self.exact_match_boost
             d["confusable_penalty"] = self.confusable_penalty
             d["identifier_vector_floor"] = self.identifier_vector_floor
+        # **回溯相容硬需求**：rerank_strategy=none 時完全不輸出 rerank 欄位，
+        # 使 canonical dict 與 v1.1 byte-identical → 所有既有 config_hash 不變
+        # （含已 locked 的推薦 e246697d41 與既有 dataset / baseline）。
+        if self.is_rerank_enabled:
+            d["rerank_strategy"] = self.rerank_strategy
+            d["rerank_top_n"] = self.rerank_top_n
         return d

@@ -39,6 +39,15 @@ IDENTIFIER_ONLY_FIELDS = (
     "identifier_vector_floor",
 )
 
+#: 只在 ``rerank_strategy != none`` 才適用的欄位（v1.2.1 §R3，比照 IDENTIFIER_ONLY_FIELDS）。
+#:
+#: :class:`RetrievalConfig` 在 ``rerank_strategy=none`` 時會**明確拒絕**這些欄位
+#: （不默默忽略）。若不做 projection，``rerank_strategy × rerank_top_n`` 的
+#: Cartesian product 會產生一整排 invalid candidate 而非乾淨的 duplicate，
+#: 使 generation stats 失去意義。projection 後 duplicate 語義維持 deterministic：
+#: 所有 ``none × 任意 rerank_top_n`` 收斂成同一個 config hash。
+RERANK_ONLY_FIELDS = ("rerank_top_n",)
+
 GEN_EXECUTABLE = "executable"
 GEN_INVALID = "invalid"
 GEN_DUPLICATE = "duplicate"
@@ -173,6 +182,15 @@ def _build_raw_configs(
                 retrieval_raw.pop(f)
                 projected.append(f)
 
+    # v1.2.1 §R3：rerank_strategy=none 不得帶 rerank 欄位 —— 同樣明確移除並記錄。
+    # 注意 rerank 與 strategy **正交**：這個 projection 對 dense 與 identifier_aware
+    # 皆適用，不能併進上面的 dense 分支。
+    if retrieval_raw.get("rerank_strategy", "none") == "none":
+        for f in RERANK_ONLY_FIELDS:
+            if f in retrieval_raw:
+                retrieval_raw.pop(f)
+                projected.append(f)
+
     # chunk strategy 切換時，prefix_format_version 由 ChunkingConfig 重新產生。
     chunk_raw.pop("prefix_format_version", None)
     return chunk_raw, retrieval_raw, tuple(projected)
@@ -284,11 +302,18 @@ def _enumerate_legal(
         ordinal += 1
 
     result.legal_candidate_count = len(result.executable)
-    if any(c.projected_fields for c in result.executable + result.rejected):
+    all_candidates = result.executable + result.rejected
+    if any(f in c.projected_fields for c in all_candidates for f in IDENTIFIER_ONLY_FIELDS):
         result.notes.append(
             "部分組合套用了 conditional projection：dense strategy 不接受 identifier 欄位，"
             f"生成時已明確移除 {list(IDENTIFIER_ONLY_FIELDS)}（§八），"
             "因此多個 identifier 參數組合會收斂成同一個 dense candidate 並計入 duplicate。"
+        )
+    if any(f in c.projected_fields for c in all_candidates for f in RERANK_ONLY_FIELDS):
+        result.notes.append(
+            "部分組合套用了 conditional projection：rerank_strategy=none 不接受 rerank 欄位，"
+            f"生成時已明確移除 {list(RERANK_ONLY_FIELDS)}（v1.2.1 §R3），"
+            "因此多個 rerank_top_n 組合會收斂成同一個 no-rerank candidate 並計入 duplicate。"
         )
     return result
 

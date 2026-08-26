@@ -321,6 +321,9 @@ class RetrievalTrial:
     chunk_config_hash: Optional[str] = None
     chunk_count: Optional[int] = None
     chunk_cache_stats_json: Optional[str] = None
+    # Slice R2（v1.2.1 / migration 0009）：aggregate rerank telemetry
+    # （rerank fingerprint、cache hit-miss 加總、rerank latency 加總）。未啟用時為 None。
+    rerank_stats_json: Optional[str] = None
 
 
 @dataclass
@@ -352,3 +355,6 @@ class TrialCaseResult:
     # Slice 4（§十八.4 / §十九）：identifier-aware 每題 retrieval 明細（query identifiers、
     # dense/identifier/union/dedup/exact/penalty/threshold-rejection counts、strategy/ranking version）。
     retrieval_meta_json: Optional[str] = None
+    # Slice R2（v1.2.1 / migration 0009）：per-case rerank metadata（window/tail 規模、
+    # cache hit-miss、rerank latency、排序主鍵來源）。rerank 未啟用時為 None。
+    rerank_meta_json: Optional[str] = None
