@@ -211,8 +211,12 @@ evaluation/corpus/
 def fetch_raw(config, *, fetcher=None, sleeper=None) -> bytes
     # fetcher: Callable[[str, float], bytes]，預設為 httpx 實作；測試注入 fake
     # sleeper: Callable[[float], None]，預設 time.sleep；測試注入以避免真實等待
-def parse_raw(raw_zip: bytes) -> tuple[str, list[LawRecord]]
-    # 回傳 (source_update_date, records)
+def parse_raw(raw_zip: bytes, *, max_skip_ratio=0.05)
+        -> tuple[str, list[LawRecord], list[SkippedRecordDiagnostic]]
+    # 回傳 (source_update_date, valid_records, skipped_record_diagnostics)
+    # SkippedRecordDiagnostic = TypedDict{index: int, law_name: str|None, reason: str}
+    # 逐筆跳過是有損的：Slice B manifest 需要可機器讀取的 skipped_records 數量
+    # 與 reason 分佈，才能分辨「來源本來就這樣」與「來源契約悄悄改變了」。
 def select(records, config) -> list[LawRecord]
     # 決定性：先套 filter，再依 pcode 升冪排序，再取前 max_laws 筆
 
@@ -491,7 +495,7 @@ external source → snapshot → normalized docs → chunks → Qdrant → retri
 **實作任務**
 1. `LawRecord` / `NormalizedDocument` dataclass（忠實對映來源欄位，不臆造；**不建立 `SnapshotManifest`**）。
 2. `fetch_raw(config, *, fetcher=None, sleeper=None)`：預設 `httpx` 實作，可注入；timeout / retry 可測。
-3. `parse_raw`：ZIP → `ChLaw.json` → `utf-8-sig` → JSON → `(UpdateDate, [LawRecord])`；`pcode` 由 `LawURL` 解析；驗證 ZIP 格式、`ChLaw.json` 存在、頂層結構、必要欄位、duplicate pcode。
+3. `parse_raw`：ZIP → `ChLaw.json` → `utf-8-sig` → JSON → `(UpdateDate, [LawRecord], [SkippedRecordDiagnostic])`；`pcode` 由 `LawURL` 解析；驗證 ZIP 格式、`ChLaw.json` 存在、頂層結構、必要欄位、duplicate pcode。跳過的 record 以 `SkippedRecordDiagnostic`（`models.py`）保留 provenance，供 Slice B manifest 使用。
 4. `select`：filter → pcode 升冪 → `max_laws`；輸入順序不影響輸出；`include_repealed` 預設 `true`。
 5. `to_markdown`：依 §5.5，章節路徑堆疊 + `{chapter_path}｜{ArticleNo}` heading；C 絕不獨立成 heading；丟棄 `LawAttachements`；`is_repealed` 進 metadata。
 
