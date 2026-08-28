@@ -43,6 +43,13 @@ node_modules/
 playwright-report/
 test-results/
 
+# External corpus Slice B：snapshot 的 raw artifact（來源 ZIP / JSON / schema.csv）
+# 體積過大，不入庫；其 SHA-256 已記於 manifest.json，仍可稽核（計畫 §6.3、§6.7）。
+# 注意：manifest.json 與 normalized/ 為受追蹤產物，**不得**忽略。
+evaluation/corpora/*/*/raw/
+# External corpus Slice B：atomic 寫入的暫存目錄（.<snapshot_id>.tmp）為半成品，不入庫。
+evaluation/corpora/*/.*.tmp/
+
 # 向量資料庫本地儲存（若以本地目錄掛載時）
 qdrant_storage/
 

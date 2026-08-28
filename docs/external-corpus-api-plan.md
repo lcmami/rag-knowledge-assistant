@@ -316,7 +316,8 @@ snapshot_id = moj-chlaw-<UpdateDate:YYYYMMDD>-<selection_hash[:8]>-<raw_sha256[:
 | `selected_record_count` | 挑選後法規數 |
 | `normalized_document_count` | 產出 `.md` 檔數 |
 | `article_count` | type-`A` 條文總數 |
-| `skipped_records` / `skipped_articles` | 被跳過的筆數與原因統計 |
+| `skipped_record_count` / `skipped_record_reason_counts` / `skipped_records` | 被跳過的**來源 record** 筆數、原因統計與逐筆明細 |
+| `skipped_article_count` | 已挑選的 record 中，因正規化規則而未輸出的 type-`A` 條文總數 |
 | `corpus_hash` | 由 `hashing.corpus_hash` 產生 |
 | `git_state` | 由 `hashing.git_state()` 產生 |
 | `schema_version` | manifest 自身 schema 版本 |
@@ -389,7 +390,7 @@ retrieval / rerank 設定沿用既有 `evaluation/configs/` 慣例，本計畫�
 | **缺少 `ChLaw.json`** | 立即失敗並列出 ZIP 實際成員。 |
 | **頂層結構不符** | 缺 `UpdateDate` 或 `Laws`、`Laws` 非 list → 立即失敗。 |
 | **Malformed record** | 缺 `LawArticles`、`LawName` 空、`LawURL` 無法解析 `pcode` → 跳過該筆，累計於 `skipped_records`。若跳過比例超過門檻（預設 5%）則整體失敗（代表來源結構改變）。 |
-| **條文內容為空** | 跳過該條，計入 `skipped_articles`。若一部法規所有條文皆空 → 跳過該法規。 |
+| **條文內容為空** | 跳過該條，計入 `skipped_article_count`。若一部法規所有條文皆空 → 該法規正規化後無 document；它**仍是 valid selected record**（不計入 `skipped_record_count`），但其條文全數計入 `skipped_article_count`。 |
 | **Partial fetch** | 回應位元組數與 `Content-Length` 不符 → 視為失敗並重試。 |
 | **Duplicate record** | `pcode` 重複 → 立即失敗（違反已驗證的唯一性假設，代表來源契約變動）。 |
 | **Empty result** | 挑選後為 0 筆 → 明確失敗，不產生空 snapshot。 |
