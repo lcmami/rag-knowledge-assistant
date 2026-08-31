@@ -176,6 +176,8 @@ evaluation/corpus/
 
 授權：Open Government Data License, version 1.0（OGDL-Taiwan-1.0）。
 
+> **Slice D 實測確認（2026-08）：** 上表全部欄位與 §5.2 / §5.3 的數值皆與規劃期記錄**完全相符**（1,346 部 / 47,257 條 type-`A` / 4,062 筆 type-`C` / 322 部已廢止），**無契約漂移**。實際回應為 6,115,185 bytes。此後由 `tests/integration/test_corpus_external_api.py`（marker `external_api`，預設不執行）持續偵測。
+
 `schema.csv` 為來源自帶的欄位字典，實作時一併保存於 `raw/` 以利稽核。
 
 ### 5.2 Law record 欄位（實測）
@@ -604,6 +606,23 @@ external source → snapshot → normalized docs → chunks → Qdrant → retri
 
 **停止條件**：**STOP**，等待 review。**不得**自行開啟 Slice E 或建立評測資料集。
 
+**Slice D 執行結果（實測，見 [evaluation/corpus-moj-law-pilot-report.md](../evaluation/corpus-moj-law-pilot-report.md)）**
+
+- snapshot `moj-chlaw-20260821-2e815ced-9629909b`：100 部法規、3,437 條文、
+  3,643 chunk；入庫體積約 1.28 MB，**未**觸發 §6.7 的 10 MB size trigger。
+- 來源契約與 §5.1–§5.3 規劃期記錄**完全相符**（1,346 部 / 47,257 條 / 4,062 編章節 /
+  322 廢止），無漂移。契約偵測已固化為 `external_api` marker 測試。
+- L2 確認：hard token split 68 / 3,437 = **1.98%**（估計約 1.5%）；0 chunk 超過
+  token 上限、0 strategy fallback。
+- L1 確認：3,643 個 chunk 中 **0 個**帶有 identifier（0.00%），identifier-aware
+  100% 退化為 dense。
+- Slice C 發現的法規標頭 chunk 在 100 部規模占 **2.74%**；一般條文查詢 top-5 中
+  僅占 **0.67%**，**未觀察到 retrieval pollution**。
+- **Pilot 結論：NOT YET SUITABLE。** 條號歧義與跨法規語意歧義充足，但
+  `max_laws=100` + `order_by=pcode` 的決定性截斷落在憲政／院級組織法規區段，
+  **0 組標題詞幹碰撞、0 組現行／廢止交錯**（完整 corpus 分別有 26 組與 19 組）。
+  下一階段 holdout 前需 Owner 先決定 selection policy。詳見結果文件 §7.F。
+
 ---
 
 ## 11. Final Acceptance Criteria
@@ -645,6 +664,21 @@ external source → snapshot → normalized docs → chunks → Qdrant → retri
 `chunk_size_chars=600` → 約 **583 tokens**，超過 `embedding_max_tokens=480`。`TextSplitter._enforce_token_limit` / `_hard_split_by_tokens` 會頻繁觸發，切點落在 token 邊界而非語意邊界。另有約 1.5%（6/400）的條文單獨即超過 480 tokens，無論如何都會被硬切。
 
 處置：pilot 以 **config 值**（`target_chars` 450 / `overlap_chars` 80）因應，**不修改任何程式碼**；`target_chars` 本就是既有的 search dimension。實際 hard split 比例列為 Slice D 的 statistics 項目。
+
+**Slice D 實測：** 68 / 3,437 = **1.98%** 的條文本身即超過 480 tokens（估計約 1.5%）；切分後 0 chunk 超過上限、0 strategy fallback。
+
+**L3 — pilot 的 100 部並非完整 corpus 的代表性樣本（Slice D 實測發現）。**
+
+`max_laws=100` + `order_by=pcode` 是決定性截斷，取到 pcode `A0000001`–`A0030243`，即憲政／院級組織法規這一個狹窄區段。以同一組確定性規則量測：
+
+| 指標 | pilot（100 部） | 完整 corpus（1,346 部） |
+|---|---|---|
+| 標題詞幹碰撞 | 0 群 / 0 部 | 26 群 / 52 部 |
+| 現行／已廢止交錯詞幹 | 0 群 | 19 群 |
+| 共用 6 字前綴 | 4 群 / 8 部 | 95 群 / 288 部 |
+| 已廢止法規 | 23 | 322 |
+
+後果：本 snapshot 的條號歧義與跨法規語意歧義充足，但**標題混淆與現行／廢止混淆幾乎不存在**。任何基於本 snapshot 的結論**不得**外推至完整 corpus；建立 hard holdout 前需先決定 selection policy（見 [evaluation/corpus-moj-law-pilot-report.md](../evaluation/corpus-moj-law-pilot-report.md) §7.F）。
 
 ---
 
