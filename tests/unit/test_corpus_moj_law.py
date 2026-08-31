@@ -455,3 +455,93 @@ def test_fetch_then_parse_round_trip():
 
     assert len(records) == 4
     assert skipped == []
+
+
+# ---------------------------------------------------------------------------
+# 4. explicit pcode selection（Slice D2 challenge corpus）
+# ---------------------------------------------------------------------------
+# 契約重點：``include_pcodes`` 是一份**明確指名**的清單，挑選結果必須恰好等於它。
+# 任何會讓結果變少的情形都必須明確失敗，而不是回傳較小的子集 —— challenge corpus
+# 的 mandatory confuser 不得被任何設定悄悄削減。
+
+
+def test_explicit_pcode_selection_returns_exactly_the_requested_laws():
+    _update, records, _skipped = parse_raw(fixture_zip())
+    requested = (PCODE_UNIFORM, PCODE_TEMP)
+
+    selected = select(records, SourceConfig(max_laws=None, include_pcodes=requested))
+
+    assert [r.pcode for r in selected] == sorted(requested)
+
+
+def test_explicit_pcode_selection_is_deterministic_regardless_of_input_order():
+    """來源 ``Laws[]`` 順序改變不得影響結果。"""
+    _update, records, _skipped = parse_raw(fixture_zip())
+    config = SourceConfig(max_laws=None, include_pcodes=(PCODE_ESTATE, PCODE_TEMP, PCODE_UNIFORM))
+
+    forward = [r.pcode for r in select(list(records), config)]
+    reversed_ = [r.pcode for r in select(list(reversed(records)), config)]
+    rotated = [r.pcode for r in select(records[2:] + records[:2], config)]
+
+    assert forward == reversed_ == rotated == sorted(config.include_pcodes)
+
+
+def test_explicit_pcode_selection_ignores_requested_list_ordering():
+    """frozen 清單的書寫順序不影響 canonical 結果（mandatory 先寫或後寫皆同）。"""
+    _update, records, _skipped = parse_raw(fixture_zip())
+    members = (PCODE_TEMP, PCODE_ADVISORY, PCODE_UNIFORM)
+
+    ascending = select(records, SourceConfig(max_laws=None, include_pcodes=members))
+    descending = select(records, SourceConfig(max_laws=None, include_pcodes=tuple(reversed(members))))
+    interleaved = select(
+        records, SourceConfig(max_laws=None, include_pcodes=(members[1], members[2], members[0]))
+    )
+
+    assert [r.pcode for r in ascending] == [r.pcode for r in descending]
+    assert [r.pcode for r in ascending] == [r.pcode for r in interleaved]
+    assert [r.pcode for r in ascending] == sorted(members)
+
+
+def test_missing_requested_pcode_fails_clearly():
+    _update, records, _skipped = parse_raw(fixture_zip())
+    config = SourceConfig(max_laws=None, include_pcodes=(PCODE_UNIFORM, "Z9999999"))
+
+    with pytest.raises(MojLawSelectionError, match="不存在於來源") as excinfo:
+        select(records, config)
+    assert "Z9999999" in str(excinfo.value)
+
+
+def test_requested_pcode_filtered_out_by_other_settings_fails_instead_of_shrinking():
+    """被 ``include_repealed`` 濾掉的指名法規必須報錯，不得靜默捨棄。"""
+    _update, records, _skipped = parse_raw(fixture_zip())
+    config = SourceConfig(
+        max_laws=None, include_repealed=False, include_pcodes=(PCODE_UNIFORM, PCODE_TEMP)
+    )
+
+    with pytest.raises(MojLawSelectionError, match="被其他挑選條件濾除") as excinfo:
+        select(records, config)
+    assert PCODE_TEMP in str(excinfo.value)
+
+
+def test_requested_pcodes_exceeding_max_laws_fail_instead_of_being_truncated():
+    """mandatory 清單超過 max_laws 時必須 STOP，不得偷偷截斷。"""
+    _update, records, _skipped = parse_raw(fixture_zip())
+    config = SourceConfig(max_laws=2, include_pcodes=tuple(ALL_PCODES_SORTED))
+
+    with pytest.raises(MojLawSelectionError, match="不得被截斷"):
+        select(records, config)
+
+
+def test_explicit_selection_at_exactly_max_laws_is_allowed():
+    _update, records, _skipped = parse_raw(fixture_zip())
+    config = SourceConfig(max_laws=len(ALL_PCODES_SORTED), include_pcodes=tuple(ALL_PCODES_SORTED))
+
+    assert [r.pcode for r in select(records, config)] == ALL_PCODES_SORTED
+
+
+def test_include_pcodes_defaults_to_none_preserving_original_semantics():
+    """預設為 ``None`` —— 未使用此能力時走的是與新增前完全相同的路徑。"""
+    _update, records, _skipped = parse_raw(fixture_zip())
+
+    assert SourceConfig().include_pcodes is None
+    assert [r.pcode for r in select(records, SourceConfig(max_laws=None))] == ALL_PCODES_SORTED

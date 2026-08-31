@@ -33,6 +33,11 @@ DEFAULT_MAX_SKIP_RATIO = 0.05
 _PCODE_RE = re.compile(r"^[A-Za-z0-9]+$")
 
 
+def is_valid_pcode(value: str) -> bool:
+    """pcode 的字面合法性。與 :func:`extract_pcode` 使用同一條規則。"""
+    return bool(_PCODE_RE.match(value))
+
+
 class MojLawError(Exception):
     """MOJ provider 的錯誤基底。"""
 
@@ -66,6 +71,9 @@ class SourceConfig:
     category_prefix: Optional[str] = None
     include_repealed: bool = True
     order_by: str = "pcode"
+    #: 明確指名的 pcode 清單（Slice D2 challenge corpus）。``None`` 代表沿用原本的
+    #: filter -> 排序 -> 截斷語意，行為與新增此欄位之前**完全相同**。
+    include_pcodes: Optional[tuple[str, ...]] = None
     # 容錯
     max_skip_ratio: float = DEFAULT_MAX_SKIP_RATIO
 
@@ -309,23 +317,66 @@ def parse_raw(
 # ---------------------------------------------------------------------------
 # 3. select
 # ---------------------------------------------------------------------------
+def _passes_filters(record: LawRecord, config: SourceConfig) -> bool:
+    return (config.include_repealed or not record.is_repealed) and (
+        config.category_prefix is None
+        or record.law_category.startswith(config.category_prefix)
+    )
+
+
+def _select_explicit(records: list[LawRecord], config: SourceConfig) -> list[LawRecord]:
+    """``include_pcodes`` 模式：挑選結果必須**恰好**等於指名的集合。
+
+    契約刻意嚴格 —— 這是為了讓 challenge corpus 的 mandatory confuser 清單不可能
+    被任何其他設定悄悄削減。任何會讓結果少於指名集合的情形（pcode 不存在、被
+    ``include_repealed`` / ``category_prefix`` 濾掉、被 ``max_laws`` 截斷）一律
+    明確失敗，而**不是**回傳一個較小的子集。
+    """
+    requested = config.include_pcodes or ()
+    by_pcode = {r.pcode: r for r in records}
+
+    missing = sorted(set(requested) - set(by_pcode))
+    if missing:
+        raise MojLawSelectionError(
+            f"include_pcodes 指名的 pcode 不存在於來源：{missing}"
+            f"（來源共 {len(records)} 筆）"
+        )
+
+    chosen = [by_pcode[p] for p in requested]
+    dropped = sorted(r.pcode for r in chosen if not _passes_filters(r, config))
+    if dropped:
+        raise MojLawSelectionError(
+            f"include_pcodes 指名的 pcode 被其他挑選條件濾除：{dropped}"
+            f"（include_repealed={config.include_repealed}、"
+            f"category_prefix={config.category_prefix!r}）；"
+            "明確指名的法規不得被靜默捨棄"
+        )
+    if config.max_laws is not None and len(chosen) > config.max_laws:
+        raise MojLawSelectionError(
+            f"include_pcodes 指名 {len(chosen)} 部，超過 max_laws={config.max_laws}；"
+            "明確指名的法規不得被截斷"
+        )
+
+    # 指名清單的書寫順序不影響結果：一律以 pcode canonical 排序輸出。
+    chosen.sort(key=lambda r: r.pcode)
+    return chosen
+
+
 def select(records: list[LawRecord], config: SourceConfig) -> list[LawRecord]:
     """決定性挑選：``filter -> pcode 升冪 -> max_laws``。
 
     輸入順序不影響輸出（排序在截斷之前），故同一份來源必得同一份子集。
+
+    ``config.include_pcodes`` 非 ``None`` 時改走 :func:`_select_explicit`；為
+    ``None``（預設）時語意與此欄位存在之前**完全相同**。
     """
     if config.order_by != "pcode":
         raise MojLawSelectionError(f"不支援的 order_by：{config.order_by!r}（目前只支援 'pcode'）")
 
-    filtered = [
-        r
-        for r in records
-        if (config.include_repealed or not r.is_repealed)
-        and (
-            config.category_prefix is None
-            or r.law_category.startswith(config.category_prefix)
-        )
-    ]
+    if config.include_pcodes is not None:
+        return _select_explicit(records, config)
+
+    filtered = [r for r in records if _passes_filters(r, config)]
     filtered.sort(key=lambda r: r.pcode)
 
     if config.max_laws is not None:

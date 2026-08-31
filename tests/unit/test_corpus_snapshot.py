@@ -869,3 +869,180 @@ def test_config_validation_rejects_contract_violations(mutate, pattern):
 def test_load_config_reports_missing_file():
     with pytest.raises(CorpusConfigError, match="找不到 config"):
         load_config(os.path.join(REPO_ROOT, "evaluation", "configs", "does-not-exist.json"))
+
+
+# ---------------------------------------------------------------------------
+# explicit pcode selection（Slice D2）：backward compatibility 是首要契約
+# ---------------------------------------------------------------------------
+CHALLENGE_CONFIG_PATH = os.path.join(
+    REPO_ROOT, "evaluation", "configs", "corpus-moj-law-challenge.json"
+)
+
+#: 既有 pcode-first pilot 的 ``selection_hash``，已固化於受追蹤 snapshot
+#: ``moj-chlaw-20260821-2e815ced-9629909b`` 的 manifest。新增任何 optional
+#: selection 能力都**不得**改變這個值 —— 舊 pilot 必須永遠可重現。
+PILOT_SELECTION_HASH = "2e815ced283adb3d04556db44b4300078bc3fb09e39c87fc2450da7c1476ad14"
+
+
+def test_pilot_selection_hash_is_backward_compatible():
+    """回歸測試：舊 pilot config 的 selection_hash 必須仍等於既有值。"""
+    assert selection_hash(load_config(PILOT_CONFIG_PATH).source) == PILOT_SELECTION_HASH
+
+
+def test_optional_selection_field_stays_out_of_payload_when_unused():
+    """``include_pcodes`` 未使用時不得出現在 payload —— 否則舊 hash 會改變。"""
+    payload = selection_payload(SourceConfig())
+
+    assert "include_pcodes" not in payload
+    assert set(payload) == {"max_laws", "category_prefix", "include_repealed", "order_by"}
+
+
+def test_optional_selection_field_enters_payload_only_when_used():
+    payload = selection_payload(SourceConfig(include_pcodes=("A0000001", "A0000002")))
+
+    assert payload["include_pcodes"] == ["A0000001", "A0000002"]
+    assert selection_hash(SourceConfig(include_pcodes=("A0000001",))) != PILOT_SELECTION_HASH
+
+
+def test_explicit_selection_hash_is_deterministic_and_order_sensitive_only_to_content():
+    """相同指名集合必得相同 hash；不同集合必得不同 hash。"""
+    a = SourceConfig(include_pcodes=("A0000001", "A0000002"))
+    b = SourceConfig(include_pcodes=("A0000001", "A0000002"))
+    c = SourceConfig(include_pcodes=("A0000001", "A0000003"))
+
+    assert selection_hash(a) == selection_hash(b)
+    assert selection_hash(a) != selection_hash(c)
+
+
+def test_challenge_config_is_a_frozen_explicit_selection():
+    config = load_config(CHALLENGE_CONFIG_PATH)
+
+    assert config.provider == PROVIDER_MOJ_LAW
+    assert config.output_root == "evaluation/corpora/moj-law"
+    assert config.source.max_laws == 100
+    assert config.source.include_repealed is True
+    assert config.source.order_by == "pcode"
+    assert config.source.include_pcodes is not None
+    assert len(config.source.include_pcodes) == 100
+    assert len(set(config.source.include_pcodes)) == 100
+
+
+def test_challenge_config_does_not_disturb_the_pilot_config():
+    """兩份 config 是獨立 identity；challenge 的存在不改變 pilot 的 hash。"""
+    pilot = load_config(PILOT_CONFIG_PATH)
+    challenge = load_config(CHALLENGE_CONFIG_PATH)
+
+    assert selection_hash(pilot.source) == PILOT_SELECTION_HASH
+    assert selection_hash(challenge.source) != selection_hash(pilot.source)
+
+
+def test_challenge_config_contains_no_secret():
+    with open(CHALLENGE_CONFIG_PATH, "r", encoding="utf-8") as handle:
+        lowered = handle.read().lower()
+    for forbidden in ("api_key", "apikey", "authorization", "token", "secret", "password"):
+        assert forbidden not in lowered
+
+
+@pytest.mark.parametrize(
+    "value,pattern",
+    [
+        (["A0000001", "A0000001"], "重複"),
+        (["A0000001", "A0000001", "A0000002", "A0000002"], "重複"),
+        ([], "不得為空"),
+        ("A0000001", "型別錯誤"),
+        ([123], "型別錯誤"),
+        (["not a pcode!"], "不是合法 pcode"),
+    ],
+)
+def test_include_pcodes_config_validation(value, pattern):
+    with open(PILOT_CONFIG_PATH, "r", encoding="utf-8") as handle:
+        raw = json.load(handle)
+    raw["include_pcodes"] = value
+
+    with pytest.raises(CorpusConfigError, match=pattern):
+        parse_config(raw)
+
+
+def test_include_pcodes_null_is_equivalent_to_absent():
+    """明確寫 ``null`` 與省略欄位必須完全等價（含 hash）。"""
+    with open(PILOT_CONFIG_PATH, "r", encoding="utf-8") as handle:
+        raw = json.load(handle)
+    absent = parse_config(dict(raw))
+    raw["include_pcodes"] = None
+    explicit_null = parse_config(raw)
+
+    assert explicit_null.source.include_pcodes is None
+    assert selection_hash(explicit_null.source) == selection_hash(absent.source)
+    assert selection_hash(explicit_null.source) == PILOT_SELECTION_HASH
+
+
+def test_explicit_selection_snapshot_does_not_collide_with_pcode_first_snapshot(tmp_path):
+    """同一份來源 bytes、不同 selection 語意 -> 不同 snapshot_id，互不覆寫。"""
+    pcode_first = build(tmp_path, config=make_config(max_laws=2))
+    explicit = build(
+        tmp_path,
+        config=make_config(max_laws=None, include_pcodes=tuple(ALL_PCODES_SORTED[:2])),
+    )
+
+    assert pcode_first.snapshot_id != explicit.snapshot_id
+    assert pcode_first.manifest.selection_hash != explicit.manifest.selection_hash
+    # 先建立的 snapshot 完全不受影響
+    assert os.path.isdir(pcode_first.path)
+    assert read_manifest(pcode_first.path)["snapshot_id"] == pcode_first.snapshot_id
+    # 兩者挑到同一批法規，故 normalized 內容（corpus_hash）相同 —— 差別只在 identity
+    assert pcode_first.manifest.corpus_hash == explicit.manifest.corpus_hash
+
+
+def test_explicit_selection_manifest_records_the_frozen_list(tmp_path):
+    """manifest 的 selection 欄位必須足以自行重算 selection_hash（含指名清單）。"""
+    requested = tuple(ALL_PCODES_SORTED[:3])
+    manifest = read_manifest(
+        build(tmp_path, config=make_config(max_laws=None, include_pcodes=requested)).path
+    )
+
+    assert manifest["selection"]["include_pcodes"] == list(requested)
+    recomputed = hashlib.sha256(
+        hashing.canonical_json(manifest["selection"]).encode("utf-8")
+    ).hexdigest()
+    assert recomputed == manifest["selection_hash"]
+
+
+def test_explicit_selection_snapshot_is_immutable_like_any_other(tmp_path):
+    config = make_config(max_laws=None, include_pcodes=tuple(ALL_PCODES_SORTED[:2]))
+    first = build(tmp_path, config=config)
+
+    with pytest.raises(SnapshotExistsError):
+        build(tmp_path, config=config)
+
+    assert read_manifest(first.path)["snapshot_id"] == first.snapshot_id
+
+
+def test_explicit_selection_failure_leaves_no_snapshot(tmp_path):
+    config = make_config(max_laws=None, include_pcodes=(ALL_PCODES_SORTED[0], "Z9999999"))
+
+    with pytest.raises(MojLawSelectionError, match="不存在於來源"):
+        build(tmp_path, config=config)
+
+    assert os.listdir(tmp_path) == []
+
+
+def test_tracked_pilot_snapshot_manifest_still_matches_the_pilot_config():
+    """受追蹤的 pcode-first snapshot 必須仍能由現行 pilot config 重算出同一 identity。
+
+    這是 backward compatibility 最直接的證據：manifest 是**已 commit 的產物**，
+    它記錄的 selection payload 與 selection_hash 必須與今天的 ``selection_payload``
+    / ``selection_hash`` 逐位元組相符。
+    """
+    manifest_path = os.path.join(
+        REPO_ROOT, "evaluation", "corpora", "moj-law",
+        "moj-chlaw-20260821-2e815ced-9629909b", MANIFEST_FILENAME,
+    )
+    with open(manifest_path, "r", encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    source = load_config(PILOT_CONFIG_PATH).source
+
+    assert manifest["selection"] == selection_payload(source)
+    assert manifest["selection_hash"] == selection_hash(source) == PILOT_SELECTION_HASH
+    assert manifest["snapshot_id"] == build_snapshot_id(
+        manifest["source_update_date"], manifest["selection_hash"], manifest["raw_sha256"]
+    )

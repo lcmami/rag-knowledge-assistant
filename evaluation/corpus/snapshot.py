@@ -41,7 +41,13 @@ from evaluation.corpus.models import (
     SkippedRecordDiagnostic,
     SnapshotManifest,
 )
-from evaluation.corpus.moj_law import SourceConfig, fetch_raw, parse_raw, select
+from evaluation.corpus.moj_law import (
+    SourceConfig,
+    fetch_raw,
+    is_valid_pcode,
+    parse_raw,
+    select,
+)
 from evaluation.corpus.normalize import to_markdown
 from evaluation.v11 import hashing
 
@@ -58,6 +64,10 @@ RAW_MEMBERS = ("ChLaw.json", "schema.csv")
 # 只有真正影響「挑選出哪些法規、以什麼順序」的設定才進 selection_hash。
 # timeout / retry / output_root / fetched_at 明確排除：它們不改變挑選結果。
 SELECTION_FIELDS = ("max_laws", "category_prefix", "include_repealed", "order_by")
+#: ``include_pcodes``（Slice D2）**只在實際使用時**才進 payload —— 見
+#: :func:`selection_payload`。刻意不併入 :data:`SELECTION_FIELDS`：那會讓既有
+#: pcode-first pilot 的 ``selection_hash`` 與 ``snapshot_id`` 追溯性改變。
+OPTIONAL_SELECTION_FIELDS = ("include_pcodes",)
 
 # config 的完整合法 key 集合；未知 key 一律拒絕（避免 typo 靜默退回預設值）。
 _REQUIRED_CONFIG_KEYS = ("provider", "endpoint", "output_root")
@@ -69,6 +79,7 @@ _OPTIONAL_CONFIG_KEYS = (
     "category_prefix",
     "include_repealed",
     "order_by",
+    "include_pcodes",
 )
 
 # 來源 UpdateDate 實測形如 ``2026/8/21 上午 12:00:00``（月／日**不補零**），
@@ -118,6 +129,39 @@ def _require(raw: dict[str, Any], key: str, types: tuple[type, ...], *, allow_no
         names = "/".join(t.__name__ for t in types)
         raise CorpusConfigError(f"config 欄位 {key!r} 型別錯誤：期望 {names}，得到 {type(value).__name__}")
     return value
+
+
+def _parse_include_pcodes(value: Any) -> tuple[str, ...]:
+    """驗證 ``include_pcodes``（Slice D2 challenge corpus 的 explicit selection）。
+
+    重複的 pcode 在此即為 config 錯誤而非靜默去重 —— 一份 frozen 清單裡出現重複
+    代表產生它的規則有 bug，不該被下游吸收掉。
+    """
+    if not isinstance(value, list):
+        raise CorpusConfigError(
+            f"config 欄位 'include_pcodes' 型別錯誤：期望 list，得到 {type(value).__name__}"
+        )
+    if not value:
+        raise CorpusConfigError("config 欄位 'include_pcodes' 不得為空 list（不指名即請省略此欄位）")
+
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    out: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise CorpusConfigError(
+                f"config 欄位 'include_pcodes'[{index}] 型別錯誤：期望 str，得到 {type(item).__name__}"
+            )
+        pcode = item.strip()
+        if not is_valid_pcode(pcode):
+            raise CorpusConfigError(f"config 欄位 'include_pcodes'[{index}] 不是合法 pcode：{item!r}")
+        if pcode in seen:
+            duplicates.add(pcode)
+        seen.add(pcode)
+        out.append(pcode)
+    if duplicates:
+        raise CorpusConfigError(f"config 欄位 'include_pcodes' 含重複 pcode：{sorted(duplicates)}")
+    return tuple(out)
 
 
 def parse_config(raw: Any) -> CorpusConfig:
@@ -172,6 +216,11 @@ def parse_config(raw: Any) -> CorpusConfig:
             _require(raw, "include_repealed", (bool,)) if "include_repealed" in raw else defaults.include_repealed
         ),
         order_by=str(_require(raw, "order_by", (str,)) if "order_by" in raw else defaults.order_by),
+        include_pcodes=(
+            _parse_include_pcodes(raw["include_pcodes"])
+            if raw.get("include_pcodes") is not None
+            else defaults.include_pcodes
+        ),
     )
     return CorpusConfig(provider=provider, source=source, output_root=output_root)
 
@@ -192,8 +241,21 @@ def load_config(path: str) -> CorpusConfig:
 # 2. selection hash / snapshot id
 # ---------------------------------------------------------------------------
 def selection_payload(source: SourceConfig) -> dict[str, Any]:
-    """挑選語意的完整表述 — 且**只有**挑選語意。"""
-    return {field: getattr(source, field) for field in SELECTION_FIELDS}
+    """挑選語意的完整表述 — 且**只有**挑選語意。
+
+    :data:`OPTIONAL_SELECTION_FIELDS` 只在**實際被使用**（非 ``None``）時才出現。
+    這是 backward compatibility 的關鍵：不使用 ``include_pcodes`` 的既有 config
+    產生的 payload 與 hash 與新增此能力之前逐位元組相同，故既有 snapshot 的
+    ``selection_hash`` / ``snapshot_id`` 追溯性不受影響。
+    """
+    payload: dict[str, Any] = {field: getattr(source, field) for field in SELECTION_FIELDS}
+    for field in OPTIONAL_SELECTION_FIELDS:
+        value = getattr(source, field)
+        if value is None:
+            continue
+        # tuple 需轉為 list 才能穩定序列化為 JSON array。
+        payload[field] = list(value) if isinstance(value, tuple) else value
+    return payload
 
 
 def selection_hash(source: SourceConfig) -> str:
