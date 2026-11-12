@@ -11,8 +11,13 @@ Constraint / Pareto objective 只能引用這些名稱；引用不存在的名�
 3. **row 存在但 ``computable=False``** → 不可計算，沿用 metric 自身的 reason。
 
 注意：per-query-type scope 只產生四個 metric（見 ``retrieval_metrics._per_query_type_metrics``），
-**沒有** ``recall_at_5`` / ``exact_code_top1_accuracy`` / latency。若要對某個 query type 設限，
+**沒有** ``exact_code_top1_accuracy`` / latency。若要對某個 query type 設限，
 只能用下方 :data:`QUERY_TYPE_METRICS` 內的名稱。
+
+v1.1 retrieval evaluator 不再產生 ``recall_at_*``：``recall_at_{1,3,5}`` 與
+``relevant_context_hit_at_{1,3,5}`` 在 v1.1 中公式、case 篩選、relevance threshold
+完全相同（皆為 ``_hit_at_k(..., level=1)``），屬重複 metric。請改用
+``relevant_context_hit_at_*``。
 """
 from __future__ import annotations
 
@@ -30,7 +35,6 @@ AGGREGATE_METRICS: frozenset[str] = frozenset(
     [
         *(f"strong_evidence_hit_at_{k}" for k in (1, 3, 5)),
         *(f"relevant_context_hit_at_{k}" for k in (1, 3, 5)),
-        *(f"recall_at_{k}" for k in (1, 3, 5)),
         "mrr",
         f"graded_ndcg_at_{_NDCG_K}",
         "graded_ndcg_computable_count",

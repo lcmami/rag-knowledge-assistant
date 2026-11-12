@@ -25,20 +25,31 @@ def classify_failure(
     conflicting_identifiers: Sequence[str] = (),
     retrieved_any: bool = True,
 ) -> Optional[str]:
-    """回傳受控 ``failure_type``；非失敗（relevant_hit / unanswerable_ok）回傳 None。"""
+    """由 evaluator 已知事實決定 failure type；LLM 不重新分類。"""
+
     if case_status == CASE_STATUS_UNANSWERABLE_FP:
         return "unanswerable_false_positive"
-    if case_status in (CASE_STATUS_RELEVANT_HIT, CASE_STATUS_UNANSWERABLE_OK):
+
+    if case_status == CASE_STATUS_UNANSWERABLE_OK:
         return None
-    # 以下為 answerable 但未命中的情形。
+
+    # answerable 且 relevant 已經 rank 1：沒有 retrieval failure
+    if first_relevant_rank == 1:
+        return None
+
+    # 有 relevant，但被混淆結果壓在後面
     if conflicting_identifiers:
         return "confusable_confusion"
+
+    # relevant 有找到，但不是第一名：MRR 仍有改善空間
+    if first_relevant_rank is not None and first_relevant_rank > 1:
+        return "wrong_rank"
+
+    # 完全沒結果，多半是 threshold 過嚴
     if not retrieved_any:
         return "threshold_too_high"
-    if first_relevant_rank is None:
-        return "miss"
-    if first_relevant_rank > 1:
-        return "wrong_rank"
+
+    # 有結果，但 relevant 完全沒進榜
     return "miss"
 
 

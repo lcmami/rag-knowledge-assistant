@@ -68,15 +68,6 @@
       "on_not_computable": "fail"
     },
     {
-      "name": "p95_latency_ceiling_ms",
-      "metric": "p95_retrieval_latency_ms",
-      "scope": "aggregate",
-      "operator": "<=",
-      "value": 86,
-      "safety_critical": false,
-      "on_not_computable": "fail"
-    },
-    {
       "name": "semantic_no_regression",
       "metric": "relevant_context_hit_at_5",
       "scope": "query_type",
@@ -124,12 +115,6 @@
       "scope": "aggregate",
       "direction": "minimize",
       "on_not_computable": "exclude_candidate"
-    },
-    {
-      "metric": "p95_retrieval_latency_ms",
-      "scope": "aggregate",
-      "direction": "minimize",
-      "on_not_computable": "exclude_candidate"
     }
   ],
   "recommendation_policy": {
@@ -158,10 +143,6 @@
       },
       {
         "key": "duplicate_ratio",
-        "direction": "minimize"
-      },
-      {
-        "key": "p95_retrieval_latency_ms",
         "direction": "minimize"
       },
       {
@@ -194,10 +175,6 @@
       },
       {
         "key": "duplicate_ratio",
-        "direction": "minimize"
-      },
-      {
-        "key": "p95_retrieval_latency_ms",
         "direction": "minimize"
       },
       {

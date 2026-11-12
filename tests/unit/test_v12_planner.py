@@ -60,11 +60,16 @@ def test_fake_default_produces_valid_proposal():
     planner = FakeAgentPlanner()
     raw = planner.propose(ctx)
     proposal = parse_proposal(raw)
+    tune_failure_types = {
+        f["case_id"]: f["failure_type"]
+        for f in ctx.to_prompt_payload().get("tune_failures", [])
+    }
     res = ProposalValidator(rc).validate(
         proposal,
         parent=rc.baseline,
         tested_config_hashes=set(),
         segment_texts=ctx.segment_texts(),
+        tune_failure_types=tune_failure_types,
     )
     assert res.ok, res.errors
     assert res.parameter_changes == ["retrieval.top_k: 5→6"]

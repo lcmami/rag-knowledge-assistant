@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "search_name": "v11-search-scifact-chunking",
+  "search_mode": "grid",
+  "random_seed": 42,
+  "max_candidates": 8,
+  "validation_top_n": 2,
+  "dataset_path": "evaluation/datasets/scifact_agent/cases-v1.json",
+  "corpus_paths": [
+    "evaluation/datasets/scifact_agent/corpus"
+  ],
+  "keep_trial_collections": false,
+  "policy_source": "scifact_chunking_landscape_v1",
+  "policy_confidence": "exploratory",
+  "baseline": {
+    "chunk_config": {
+      "strategy": "current"
+    },
+    "retrieval_config": {
+      "strategy": "dense",
+      "top_k": 5,
+      "score_threshold": 0.55,
+      "candidate_multiplier": 3,
+      "candidate_cap": 50
+    }
+  },
+  "search_space": {
+    "chunking": {
+      "strategy": ["paragraph"],
+      "target_chars": [300, 600, 900, 1200],
+      "overlap_chars": [100]
+    },
+    "retrieval": {}
+  },
+  "hard_constraints": [],
+  "pareto_objectives": [
+    {
+      "metric": "mrr",
+      "scope": "aggregate",
+      "direction": "maximize",
+      "on_not_computable": "exclude_candidate"
+    }
+  ],
+  "recommendation_policy": {
+    "complexity_version": "v1",
+    "float_tolerance": 1e-09,
+    "tune_ranking": [
+      {"key": "mrr", "direction": "maximize"},
+      {"key": "config_hash", "direction": "minimize"}
+    ],
+    "recommendation_ranking": [
+      {"key": "mrr", "direction": "maximize"},
+      {"key": "graded_ndcg_at_5", "direction": "maximize"},
+      {"key": "relevant_context_hit_at_5", "direction": "maximize"},
+      {"key": "relevant_section_precision_at_5", "direction": "maximize"},
+      {"key": "config_complexity", "direction": "minimize"},
+      {"key": "config_hash", "direction": "minimize"}
+    ]
+  }
+}

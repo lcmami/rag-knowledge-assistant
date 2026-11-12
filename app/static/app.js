@@ -103,7 +103,7 @@ async function loadDocuments() {
   const tbody = $("#docs-tbody");
   setMsg($("#docs-msg"), "載入中…", "loading");
   try {
-    const res = await fetch("/api/documents");
+    const res = await fetch("api/documents");
     if (!res.ok) {
       const { message } = await parseError(res);
       throw new Error(message);
@@ -153,7 +153,7 @@ $("#docs-tbody").addEventListener("click", async (e) => {
   btn.disabled = true;
   setMsg($("#docs-msg"), "刪除中…", "loading");
   try {
-    const res = await fetch("/api/documents/" + encodeURIComponent(id), {
+    const res = await fetch("api/documents/" + encodeURIComponent(id), {
       method: "DELETE",
     });
     if (res.status !== 204) {
@@ -178,7 +178,7 @@ $("#upload-form").addEventListener("submit", async (e) => {
   btn.disabled = true;
   setMsg($("#upload-msg"), "上傳與索引中…", "loading");
   try {
-    const res = await fetch("/api/documents", { method: "POST", body: fd });
+    const res = await fetch("api/documents", { method: "POST", body: fd });
     if (res.status !== 201) {
       const { message } = await parseError(res);
       throw new Error(message);
@@ -220,7 +220,7 @@ $("#retrieve-form").addEventListener("submit", async (e) => {
   out.innerHTML = "";
   setMsg($("#retrieve-msg"), "檢索中…", "loading");
   try {
-    const res = await fetch("/api/retrieve", {
+    const res = await fetch("api/retrieve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -280,7 +280,7 @@ $("#query-form").addEventListener("submit", async (e) => {
   sourcesEl.innerHTML = "";
   setMsg($("#query-msg"), "查詢中（檢索 + LLM 生成）…", "loading");
   try {
-    const res = await fetch("/api/query", {
+    const res = await fetch("api/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

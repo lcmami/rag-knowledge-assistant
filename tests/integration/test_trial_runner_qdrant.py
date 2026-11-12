@@ -93,7 +93,7 @@ def test_trial_runner_end_to_end(qdrant_url, tmp_path):
     assert any(c.top_results_json and c.top_results_json != "[]" for c in case_results)
     metrics = {m.metric_name: m for m in repo.get_trial_metrics(t.trial_id)}
     assert metrics
-    assert {"recall_at_1", "mrr", "exact_code_top1_accuracy", "index_point_count",
+    assert {"relevant_context_hit_at_1", "mrr", "exact_code_top1_accuracy", "index_point_count",
             "graded_ndcg_at_5", "index_universe_size"} <= set(metrics)
     # §八.10：NDCG 使用該 Trial 自己的 Index Universe，數量等於 Trial Point Count
     assert metrics["index_universe_size"].value == metrics["index_point_count"].value == float(t.point_count)

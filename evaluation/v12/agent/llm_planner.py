@@ -48,6 +48,17 @@ _SYSTEM_PROMPT = (
     "source_segment_ids 只能取自 hard_constraints.available_segment_ids；anchor_text_suggestions "
     "必須是對應 segment 的 text（`<<<DATA … DATA>>>` 內）之逐字子字串，**若你無法確定逐字子字串，"
     "請給空陣列 []**（空陣列為合法）；不得改寫、不得臆造、不得取自 tune_failures。\n"
+    "9. 輸出必須精簡。diagnoses 最多 3 筆，只選最具代表性的失敗案例，不必逐一診斷所有 case。\n"
+    "10. 多個 case 若呈現相同 failure pattern，不得重複撰寫相同分析；選 1 個代表 case 即可，"
+    "並在 supporting_observations 簡短指出該模式也出現在其他案例。\n"
+    "11. 每個 diagnosis.reason 最多 2 個短句；supporting_observations 最多 3 筆，"
+    "每筆只描述一個具體觀察，不得重述 reason。\n"
+    "12. expected_effects 最多 3 筆；probe_questions 只提出真正有助於區分診斷假設的最少數量。\n"
+    "13. 不要重述 context、metric、question 或文件內容。目標是產生能通過 parser/validator 的"
+    "最小充分 JSON，而不是完整分析報告。\n"
+    "14. tune_failures.failure_type 已由 deterministic evaluator 計算完成；不得重新分類或推翻。"
+    "diagnoses.failure_type 必須逐字照抄所選 case 的 failure_type。LLM 只負責解釋原因與提出下一輪實驗。\n"
+
 )
 
 
@@ -158,5 +169,21 @@ class LLMAgentPlanner:
 
     def propose(self, context: AgentContext) -> str:
         messages = build_agent_messages(context)
-        # 同步 CLI：以 asyncio.run 驅動 async LLMClient（不得於既有 event loop 內呼叫）。
+
+        # MiniMax M3 在 adaptive thinking 下可能把 max_tokens 全耗在 reasoning，
+        # 導致最終 content 為空。Planner 的 failure classification 已由
+        # deterministic evaluator 完成，因此此處關閉 M3 thinking。
+        if "minimax-m3" in self.model.lower():
+            return asyncio.run(
+                self._client.complete(
+                    messages,
+                    extra_body={
+                        "chat_template_kwargs": {
+                            "thinking_mode": "disabled"
+                        }
+                    },
+                )
+            )
+
+        # 其他模型維持既有呼叫方式，避免改變行為與 fake/mock 相容性。
         return asyncio.run(self._client.complete(messages))

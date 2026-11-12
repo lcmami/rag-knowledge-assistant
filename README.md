@@ -30,9 +30,15 @@
 | --- | --- | --- |
 | v1.0 | `v1.0-rag-mvp` | RAG 核心：文件管理、向量檢索、LLM 問答、Citation 驗證與雙層拒答 |
 | v1.1 | `v1.1-retrieval-optimizer` | [Human-in-the-loop Retrieval Optimizer](#v11--human-in-the-loop-retrieval-optimizer)：LLM 協助出題 + 人工審核 + 隔離檢索試驗 |
-| v1.2 | `v1.2-llm-agent-mvp` | [LLM-guided Retrieval Optimization Agent](#v12--llm-guided-retrieval-optimization-agent)（**目前版本**）：有界 Agent 迴圈 + deterministic promotion gate |
+| v1.2 | `v1.2-llm-agent-mvp` | [LLM-guided Retrieval Optimization Agent](#v12--llm-guided-retrieval-optimization-agent)：有界 Agent 迴圈 + deterministic promotion gate |
+| v1.2.1 | `v1.2.1` | 離線評估層 Cross-Encoder Rerank |
+| v1.3 | `v1.3-embedding-api` | （**目前版本**）Embedding 改用外部 OpenAI-compatible API、v1.2 Grid Optimizer、SciFact 評估資料集、`deploy.sh` 一鍵部署 |
 
-三個版本皆為累加，v1.2 的 Agent 直接使用 v1.1 人工審核過的評估資料集作為正式評分依據。
+各版本皆為累加，v1.2 的 Agent 直接使用 v1.1 人工審核過的評估資料集作為正式評分依據。
+
+> **v1.3 升級注意（破壞性變更）**：Embedding 不再於本地載入 sentence-transformers 模型，
+> 必須在 `.env` 設定 `EMBEDDING_BASE_URL`、`EMBEDDING_API_KEY`、`EMBEDDING_DIMENSION`；
+> 未設定時文件 indexing 與 `/api/retrieve` 會失敗。更換 Embedding 來源後須**重新 indexing**。
 
 ---
 
@@ -54,7 +60,7 @@ flowchart TD
     subgraph Core[核心服務]
         LOAD[DocumentLoader / PdfLoader]
         SPLIT[TextSplitter · Chunking]
-        EMB[EmbeddingService<br/>BAAI/bge-small-zh-v1.5]
+        EMB[EmbeddingService<br/>OpenAI-compatible Embedding API]
         IDX[IndexingService]
         RET[RetrievalService<br/>Threshold 過濾]
         RAG[RagService<br/>雙層拒答 + Citation 驗證]
@@ -65,7 +71,6 @@ flowchart TD
         SQLITE[(SQLite<br/>文件 metadata)]
         QDRANT[(Qdrant<br/>向量)]
         FILES[(Upload storage)]
-        HF[(HF model cache)]
     end
 
     UI --> H & D & R & Q
@@ -74,10 +79,11 @@ flowchart TD
     R --> RET --> EMB & QDRANT
     Q --> RAG --> RET
     RAG --> LLM
-    EMB --> HF
 ```
 
-`LLM` 為 OpenAI-compatible 端點，**不綁定特定供應商**；未設定時 `/api/query` 回 `503 LLM_NOT_CONFIGURED`。
+`LLM` 與 `EmbeddingService` 皆為 OpenAI-compatible 端點，**不綁定特定供應商**；
+LLM 未設定時 `/api/query` 回 `503 LLM_NOT_CONFIGURED`。Embedding 回傳向量會做 L2 normalize，
+並於第一次呼叫時驗證維度與 `EMBEDDING_DIMENSION` 一致。
 
 API：`/health`、`/ready`、`/api/documents`（POST / GET / DELETE）、`/api/retrieve`（**不呼叫 LLM**）、
 `/api/query`。錯誤統一格式 `{"error": {"code", "message", "details"}}`。
@@ -87,7 +93,7 @@ API：`/health`、`/ready`、`/api/documents`（POST / GET / DELETE）、`/api/r
 
 ## v1.2 — LLM-guided Retrieval Optimization Agent
 
-**目前版本。** 有界（bounded）的 LLM-guided 檢索最佳化 Agent —— LLM 只提出假設與設定，
+有界（bounded）的 LLM-guided 檢索最佳化 Agent —— LLM 只提出假設與設定，
 是否勝出一律交由固定資料集、Metrics、Constraints 與 deterministic gate 判定。
 
 ```mermaid
@@ -130,6 +136,12 @@ flowchart LR
 > 完整設計（Proposal Schema、Validator 七項政策、白名單參數空間與界限、Budget、Promotion 判定、
 > 11 條 Safety Boundaries）見 **[docs/v1.2-agent-design.md](docs/v1.2-agent-design.md)**。
 
+**Grid Optimizer（v1.3 新增，`evaluation/v12/optimizer/`）**：在**既有** baseline index 上，
+對 `top_k` × `score_threshold` 的組合做 grid search，以 v1.1 的 `evaluate_trial` 計算 MRR 等既有 metric。
+不重新 chunk／embedding、不建立新 collection、不修改 Agent 與 evaluator。
+SciFact 評估資料集與設定檔：`evaluation/datasets/scifact_agent/`、
+`evaluation/configs/v12-agent-scifact.json`、`evaluation/configs/v11-search-scifact-chunking.json`。
+
 ---
 
 ## v1.1 — Human-in-the-loop Retrieval Optimizer
@@ -160,7 +172,8 @@ Loop B 的 Failure／Coverage Report 成為 Loop A 下一輪的輸入，但**每
 ### 1. Docker Compose（RAG 主系統）
 
 ```powershell
-# 建立 .env（未設定 LLM 時檢索仍可用）
+# 建立 .env，並填入 EMBEDDING_BASE_URL / EMBEDDING_API_KEY / EMBEDDING_DIMENSION（必填）
+# LLM_* 可留空：未設定 LLM 時檢索仍可用
 Copy-Item .env.example .env
 
 # 建置並啟動 FastAPI + Qdrant
@@ -175,7 +188,14 @@ docker compose ps
   `/api/retrieve` 皆可正常使用；`/api/query` 回 `503 LLM_NOT_CONFIGURED`。
 - **不要**為了讓 `/ready` 回 200 而填入假的 LLM 設定。
 
-第一次啟動會下載 Embedding 模型（需網路，之後由 volume cache）。更換 Embedding 模型後需**重新 indexing**。
+Linux 主機也可用一鍵部署腳本（檢查 docker、建立 `.env`、build、啟動並檢查 `/health`、`/ready`）：
+
+```bash
+bash deploy.sh
+```
+
+Embedding 透過 `.env` 設定的外部 API 計算，**不會**在啟動時下載 Embedding 模型。
+API 金鑰只放在本機 `.env`（不進版控）。更換 Embedding 來源或模型後需**重新 indexing**。
 
 ### 2. 本地開發（venv）
 
@@ -271,7 +291,7 @@ whether its own proposal wins. 驗收摘要不含 API key、完整 prompt、文�
 | --- | --- |
 | Web / API | FastAPI + Uvicorn |
 | 前端 | HTML + CSS + Vanilla JavaScript（FastAPI StaticFiles，無 React/Vue） |
-| Embedding | `BAAI/bge-small-zh-v1.5`（512 維，本地 sentence-transformers） |
+| Embedding | OpenAI-compatible Embedding API（`EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` / `EMBEDDING_DIMENSION`） |
 | 向量資料庫 | Qdrant（Cosine） |
 | 文件 metadata | SQLite |
 | PDF 解析 | PyMuPDF |
@@ -345,6 +365,14 @@ deterministic promotion gate、匿名化 Audit 與 `show` CLI、安全的 collec
     為 866.47 ms（`dense+CE`，n=30、cache 停用、local native-Qdrant loopback），約 10.08×。
     Loopback RTT 比遠端部署便宜，可能低估遠端延遲。
 16. 未評估任何最佳化路徑（ONNX／OpenVINO／量化／換模型／GPU）。
+
+**v1.3 Embedding API**
+
+17. `count_tokens` 目前以字元數估算（`len(text)`），**不是**模型 tokenizer 的精準 token 數；
+    對英文偏保守，可能使較長的 chunk 被提前拒絕。
+18. Embedding 需外部 API 可連線；API 不可用時文件 indexing 與 `/api/retrieve` 會失敗。
+19. 既有 v1.1／v1.2 的 baseline 與報告是以本地 `bge-small-zh-v1.5` 量測，改用其他 Embedding
+    模型後數值不可直接比較。
 
 **共通**：所有結果僅適用於受版控的示範語料，不代表已找到全域最佳參數，也尚未經過生產環境驗證。
 範例文件皆為作品集示範所建立的**虛構資料**，不代表任何真實公司或設備。
