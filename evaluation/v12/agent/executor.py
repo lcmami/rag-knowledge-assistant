@@ -24,12 +24,13 @@ from evaluation.v11.trial_runner import execute_run
 from evaluation.v12.agent.context import SegmentExcerpt, TuneFailureView
 from evaluation.v12.agent.orchestrator import TrialOutcome
 from evaluation.v12.agent.run_config import AgentRunConfig
+from evaluation.v12.agent.diagnosis import classify_failure
 
 ROOT = hashing.repo_root()
 
 _MAX_SEGMENTS = 4
 _MAX_TUNE_CASES = 4
-_PROBE_TOP_K = 3
+#_PROBE_TOP_K = 3
 _EXCERPT_CAP = 800
 
 
@@ -80,7 +81,10 @@ class RealTrialExecutor:
         )
         if split == "tune" and outcome.ok and t.collection_name:
             outcome.segments, outcome.tune_failures = self._context_inputs(
-                t.collection_name, trial, dataset_path
+                t.collection_name,
+                trial,
+                dataset_path,
+                t.trial_id,
             )
         return outcome
 
@@ -112,7 +116,11 @@ class RealTrialExecutor:
 
     # ------------------------------------------------------------------
     def _context_inputs(
-        self, collection_name: str, trial: TrialConfig, dataset_path: str
+        self,
+        collection_name: str,
+        trial: TrialConfig,
+        dataset_path: str,
+        trial_id: str,
     ) -> tuple[tuple[SegmentExcerpt, ...], tuple[TuneFailureView, ...]]:
         # segments：由該 Trial index 取前 K 個 chunk 作為受控原文片段。
         segments: list[SegmentExcerpt] = []
@@ -129,43 +137,100 @@ class RealTrialExecutor:
                 )
             )
 
-        # tune per-case 檢索實況：expected（gold anchor）vs actual（top-K 檢索原文）。
+        # tune failure context：
+        # 正式 failure/rank 直接使用 execute_run 已持久化的 per-case result；
+        # 只對少量 failure 重新 retrieve，以取得給 LLM 看的原文 excerpt。
         failures: list[TuneFailureView] = []
+
         abs_path = (
             dataset_path
             if os.path.isabs(dataset_path)
             else os.path.join(self._base_dir, dataset_path)
         )
+
         try:
             dataset = load_dataset(abs_path)
         except Exception:  # noqa: BLE001
             dataset = None
+
         if dataset is not None:
-            answerable = [c for c in dataset.cases if c.answerable][:_MAX_TUNE_CASES]
-            for case in answerable:
+            cases_by_id = {case.id: case for case in dataset.cases}
+
+            try:
+                case_results = self._repo.get_trial_case_results(trial_id)
+            except Exception:  # noqa: BLE001
+                case_results = []
+
+            for row in case_results:
+                case = cases_by_id.get(row.case_id)
+                if case is None:
+                    continue
+
+                # 明確成功的 case 不需要浪費一次 retrieval。
+                if (
+                    row.case_status == "unanswerable_ok"
+                    or (
+                        row.answerable
+                        and row.first_relevant_rank == 1
+                    )
+                ):
+                    continue
+
+                # 只為真正可能進 context 的 failure 重取 excerpt。
+                # 必須使用正式 trial 的 top_k，不能再硬寫 _PROBE_TOP_K=3。
                 try:
                     results = self.retrieve(
                         collection_name=collection_name,
                         trial=trial,
                         question=case.question,
-                        top_k=_PROBE_TOP_K,
+                        top_k=trial.top_k,
                     )
                 except Exception:  # noqa: BLE001
                     results = []
+
+                conflicting = (
+                    results[0]["conflicting_identifiers"]
+                    if results
+                    else []
+                )
+
+                failure_type = classify_failure(
+                    case_status=row.case_status,
+                    answerable=row.answerable,
+                    first_relevant_rank=row.first_relevant_rank,
+                    conflicting_identifiers=conflicting,
+                    retrieved_any=bool(results),
+                )
+
+                if failure_type is None:
+                    continue
+
                 anchor = ""
-                if case.expected_evidence and case.expected_evidence[0].anchor_text:
+                if (
+                    case.expected_evidence
+                    and case.expected_evidence[0].anchor_text
+                ):
                     anchor = case.expected_evidence[0].anchor_text[0]
-                conflicting = results[0]["conflicting_identifiers"] if results else []
+
                 failures.append(
                     TuneFailureView(
                         case_id=case.id,
                         question=case.question,
-                        query_type=case.query_type,
-                        case_status="tune_case",
-                        first_relevant_rank=None,
+                        query_type=row.query_type or case.query_type,
+                        case_status=row.case_status,
+                        first_relevant_rank=row.first_relevant_rank,
+                        failure_type=failure_type,
                         expected_evidence_excerpt=anchor,
-                        actual_top_excerpts=tuple(r["chunk"] for r in results),
-                        identifier_detail={"conflicting_identifiers": conflicting},
+                        actual_top_excerpts=tuple(
+                            r["chunk"] for r in results
+                        ),
+                        identifier_detail={
+                            "conflicting_identifiers": conflicting
+                        },
                     )
                 )
+
+                if len(failures) >= _MAX_TUNE_CASES:
+                    break
+
         return tuple(segments), tuple(failures)

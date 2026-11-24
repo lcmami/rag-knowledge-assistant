@@ -369,7 +369,10 @@ def _execute_trial(
     repo.upsert_trial(trial)  # §九：狀態轉換先持久化
 
     collection = trial.collection_name
+    _trial_t0 = time.monotonic()
+    print(f"[TRIAL {trial.trial_id}] START", flush=True)
     try:
+        print(f"[TRIAL {trial.trial_id}] indexing...", flush=True)
         idx = provider.build_index(collection, tc, files)
         trial.cleanup_status = CleanupStatus.ACTIVE
         trial.point_count = idx.point_count
@@ -387,10 +390,33 @@ def _execute_trial(
         # 重用已建索引，不為每題重新檢索或重新 scroll 整個 collection。
         index_universe = provider.index_manifest(collection)
 
+        # Progress: index ready（重用既有 telemetry，不重新計算）。
+        _chunks = idx.chunk_count if idx.chunk_count is not None else idx.point_count
+        if _chunks is not None and idx.point_count is not None and idx.build_time_ms is not None:
+            print(
+                f"[TRIAL {trial.trial_id}] index ready chunks={_chunks} "
+                f"points={idx.point_count} build_ms={idx.build_time_ms}",
+                flush=True,
+            )
+        else:
+            print(f"[TRIAL {trial.trial_id}] index ready", flush=True)
+
         case_retrievals: list[CaseRetrieval] = []
         retrieval_meta_by_case: dict[str, dict] = {}
         total_retrieval = 0
-        for case in dataset.cases:
+        _total_cases = len(dataset.cases)
+        print(
+            f"[TRIAL {trial.trial_id}] evaluating {_total_cases} cases",
+            flush=True,
+        )
+        # Progress cadence: ~10 updates max, always include 100%.
+        if _total_cases > 0:
+            _step = max(1, (_total_cases + 9) // 10)
+            _milestones = set(range(_step, _total_cases, _step))
+            _milestones.add(_total_cases)
+        else:
+            _milestones = set()
+        for _case_idx, case in enumerate(dataset.cases, start=1):
             ro = provider.retrieve(collection, tc, case.question, tc.top_k)
             total_retrieval += ro.retrieval_time_ms
             # Slice R2：rerank telemetry 走既有 meta 通道（rerank 未啟用時這些 key
@@ -412,6 +438,13 @@ def _execute_trial(
             )
             if ro.meta:
                 retrieval_meta_by_case[case.id] = ro.meta
+
+            if _case_idx in _milestones:
+                _pct = (_case_idx * 100) // _total_cases if _total_cases else 100
+                print(
+                    f"[TRIAL {trial.trial_id}] cases {_case_idx}/{_total_cases} ({_pct}%)",
+                    flush=True,
+                )
 
         evaluation = evaluate_trial(
             case_retrievals,
@@ -441,7 +474,15 @@ def _execute_trial(
         trial.completed_at = now_fn()
         repo.upsert_trial(trial)
         success = True
+        print(
+            f"[TRIAL {trial.trial_id}] DONE elapsed={time.monotonic() - _trial_t0:.1f}s",
+            flush=True,
+        )
     except Exception as exc:  # noqa: BLE001 - 單一 Trial 失敗須隔離
+        print(
+            f"[TRIAL {trial.trial_id}] FAILED {type(exc).__name__}: {exc}",
+            flush=True,
+        )
         trial.status = TrialStatus.FAILED
         trial.error = _sanitize_error(exc)
         trial.completed_at = now_fn()

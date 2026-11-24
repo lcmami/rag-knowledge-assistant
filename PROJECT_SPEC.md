@@ -14,6 +14,13 @@
 - **v1.1 — Human-in-the-loop Retrieval Optimizer**：已交付（tag `v1.1-retrieval-optimizer`）。
 - **v1.2 — LLM-guided Retrieval Optimization Agent**：**implemented and runtime-verified**，
   已 merge 至 `main`（merge commit `aec93b7`）、tag `v1.2-llm-agent-mvp`，GitHub Release 已發布。
+- **v1.2.1 — 離線評估層 Cross-Encoder Rerank**：已交付（僅 evaluation 層，production 未變動），
+  見 [docs/v1.2.1-rerank-design.md](docs/v1.2.1-rerank-design.md)。
+- **v1.3 — Embedding API**：Embedding 由本地 sentence-transformers（`BAAI/bge-small-zh-v1.5`）
+  改為外部 OpenAI-compatible API（`EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_DIMENSION`），
+  並新增 v1.2 Grid Optimizer、SciFact 評估資料集與 `deploy.sh`。**破壞性變更**：下方原始規格中
+  「本地 Embedding」「啟動時載入模型」「Hugging Face 模型快取」等描述僅適用於 v1.0–v1.2；
+  更換 Embedding 模型後須重新 indexing。
 
 ## v1.2 狀態
 

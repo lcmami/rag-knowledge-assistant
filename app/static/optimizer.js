@@ -462,7 +462,7 @@
   async function loadOverview() {
     const el = document.getElementById("opt-subpanel-overview");
     el.innerHTML = '<div class="opt-loading" role="status">載入中…</div>';
-    const r = await fetchJson("/api/optimizer/overview");
+    const r = await fetchJson("api/optimizer/overview");
     if (!r.ok || !r.body) {
       el.innerHTML = '<div class="opt-error" role="alert">Overview 載入失敗（HTTP ' + r.status + "）。</div>";
       return;
@@ -474,7 +474,7 @@
   async function loadSearch() {
     const el = document.getElementById("opt-subpanel-search");
     el.innerHTML = '<div class="opt-loading" role="status">載入中…</div>';
-    const list = await fetchJson("/api/optimizer/searches");
+    const list = await fetchJson("api/optimizer/searches");
     if (!list.ok || !list.body) {
       el.innerHTML = '<div class="opt-error" role="alert">Search 載入失敗（HTTP ' + list.status + "）。</div>";
       return;
@@ -491,9 +491,9 @@
     const sid = searches[0].search_id;
     state.searchId = sid;
     const [detail, cands, cmp] = await Promise.all([
-      fetchJson("/api/optimizer/searches/" + encodeURIComponent(sid)),
-      fetchJson("/api/optimizer/searches/" + encodeURIComponent(sid) + "/candidates"),
-      fetchJson("/api/optimizer/searches/" + encodeURIComponent(sid) + "/comparison"),
+      fetchJson("api/optimizer/searches/" + encodeURIComponent(sid)),
+      fetchJson("api/optimizer/searches/" + encodeURIComponent(sid) + "/candidates"),
+      fetchJson("api/optimizer/searches/" + encodeURIComponent(sid) + "/comparison"),
     ]);
     const cmpBody = (cmp.body && cmp.body.comparison) || null;
     // Known limitations 取自 Search Detail API 的 outcome（唯讀，不在前端重述實驗結論）。
@@ -519,7 +519,7 @@
   async function loadReview() {
     const el = document.getElementById("opt-subpanel-review");
     el.innerHTML = '<div class="opt-loading" role="status">載入中…</div>';
-    const list = await fetchJson("/api/optimizer/reviews");
+    const list = await fetchJson("api/optimizer/reviews");
     if (!list.ok || !list.body) {
       el.innerHTML = '<div class="opt-error" role="alert">Review 載入失敗（HTTP ' + list.status + "）。</div>";
       return;
@@ -533,8 +533,8 @@
     html += '<div class="opt-card"><h3>Review Sessions</h3>' + UI.renderReviewList(sessions) + "</div>";
     if (sessions.length) {
       const [detail, cov] = await Promise.all([
-        fetchJson("/api/optimizer/reviews/" + encodeURIComponent(sessions[0].session_id)),
-        fetchJson("/api/optimizer/coverage"),
+        fetchJson("api/optimizer/reviews/" + encodeURIComponent(sessions[0].session_id)),
+        fetchJson("api/optimizer/coverage"),
       ]);
       if (detail.body && detail.body.session) {
         html += UI.renderReviewDetail(detail.body.session, cov.body);
@@ -547,8 +547,8 @@
     const el = document.getElementById("opt-subpanel-deploy");
     el.innerHTML = '<div class="opt-loading" role="status">載入中…</div>';
     const [summary, alias] = await Promise.all([
-      fetchJson("/api/optimizer/deployment/summary"),
-      fetchJson("/api/optimizer/alias/status"),
+      fetchJson("api/optimizer/deployment/summary"),
+      fetchJson("api/optimizer/alias/status"),
     ]);
     const latest = (state.overview && state.overview.search && state.overview.search.latest_search) || null;
     let html = UI.demoBanner(state.overview && state.overview.is_demo_fixture);
@@ -590,9 +590,9 @@
     msg.className = "opt-confirm-msg msg loading";
     msg.textContent = "送出中…";
     // 端點對應（demo 情境下 admin 停用，後端會回 403；仍顯示明確錯誤）。
-    const url = op === "apply" ? "/api/optimizer/candidates/_/apply"
-      : op === "rollback" ? "/api/optimizer/rollback"
-        : "/api/optimizer/alias/initialize";
+    const url = op === "apply" ? "api/optimizer/candidates/_/apply"
+      : op === "rollback" ? "api/optimizer/rollback"
+        : "api/optimizer/alias/initialize";
     const r = await fetchJson(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

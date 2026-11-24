@@ -76,6 +76,7 @@ class ProposalValidator:
         parent: TrialConfig,
         tested_config_hashes: set[str],
         segment_texts: Mapping[str, str],
+        tune_failure_types: Mapping[str, str],
     ) -> ValidationResult:
         errors: list[str] = []
 
@@ -111,10 +112,17 @@ class ProposalValidator:
             proposal.proposed_retrieval_config, RETRIEVAL_NUMERIC_FIELDS, "retrieval_config"
         )
 
-        # 4) probe 政策（數量 / segment / anchor 存在性）。
+        # 4) diagnosis 必須引用本輪 deterministic tune failure，
+        #    且 failure_type 不得由 LLM 重新分類。
+        errors += self._check_diagnoses(
+            proposal,
+            tune_failure_types,
+        )
+
+        # 5) probe 政策（數量 / segment / anchor 存在性）。
         errors += self._check_probes(proposal, segment_texts)
 
-        # 5) 委派 v1.1 做結構驗證 + canonical 化（即使前面已有錯，也嘗試以取得更多訊息）。
+        # 6) 委派 v1.1 做結構驗證 + canonical 化
         candidate: Optional[TrialConfig] = None
         try:
             candidate = TrialConfig.from_raw(
@@ -194,6 +202,34 @@ class ProposalValidator:
                 errors.append(
                     f"{where}.{f}={val} 超出 agent 界限 [{lo}, {hi}]。"
                 )
+        return errors
+
+    @staticmethod
+    def _check_diagnoses(
+        proposal: AgentProposal,
+        tune_failure_types: Mapping[str, str],
+    ) -> list[str]:
+        errors: list[str] = []
+
+        for i, diagnosis in enumerate(proposal.diagnoses):
+            where = f"diagnoses[{i}]"
+
+            expected = tune_failure_types.get(diagnosis.case_id)
+
+            if expected is None:
+                errors.append(
+                    f"{where} 參照不存在於本輪 tune_failures 的 case_id："
+                    f"{diagnosis.case_id!r}。"
+                )
+                continue
+
+            if diagnosis.failure_type != expected:
+                errors.append(
+                    f"{where}.failure_type={diagnosis.failure_type!r} "
+                    f"與 deterministic evaluator 結果 {expected!r} 不一致；"
+                    "LLM 不得重新分類 failure_type。"
+                )
+
         return errors
 
     def _check_probes(

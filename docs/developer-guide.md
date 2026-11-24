@@ -13,7 +13,9 @@
 | --- | --- |
 | `QDRANT_URL` | Qdrant 位址。Compose 內用 service name：`http://qdrant:6333`；本機通常 `http://localhost:6333` |
 | `QDRANT_COLLECTION` | 正式 Collection，預設 `factory_knowledge` |
-| `EMBEDDING_MODEL` | 預設 `BAAI/bge-small-zh-v1.5` |
+| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | OpenAI-compatible Embedding API 端點與金鑰（v1.3 起**必填**；未設定時 indexing 與檢索會拋 `EmbeddingError`） |
+| `EMBEDDING_DIMENSION` | 預期向量維度；第一次呼叫時驗證 API 回傳維度，不一致即報錯 |
+| `EMBEDDING_MODEL` | 傳給 Embedding API 的模型名稱 |
 | `EMBEDDING_QUERY_INSTRUCTION` | Query 專用 instruction（文件 chunk 不加） |
 | `RETRIEVAL_SCORE_THRESHOLD` | 拒答門檻，預設 `0.55`（依現有資料集校準，非任意假設） |
 | `RETRIEVAL_DEFAULT_TOP_K` / `RETRIEVAL_MAX_TOP_K` | Top-K 預設與上限 |
@@ -24,8 +26,8 @@
 
 ### 安全規則
 
-- 正式 API Key **只放本機 `.env`**（已被 `.gitignore` 忽略），不得寫入 `.env.example`、程式碼、
-  前端或任何 log。
+- 正式 API Key（`LLM_API_KEY`、`EMBEDDING_API_KEY`）與內部端點網址**只放本機 `.env`**
+  （已被 `.gitignore` 忽略），不得寫入 `.env.example`、程式碼、前端或任何 log。
 - **不要**為了讓 `/ready` 回 200 而填入假的 LLM 設定。未設定 LLM 時
   `llm_config=error` 並回 503 是**預期行為**，文件管理與 `/api/retrieve` 仍可正常使用。
 - `docker compose config` 可能輸出由 `.env` 展開後的內容。驗證 Compose 設定時使用

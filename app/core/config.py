@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # --- Embedding ---
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
     embedding_query_instruction: str = "为这个句子生成表示以用于检索相关文章："
+    # OpenAI-compatible Embedding API（取代本地 sentence-transformers）。
+    # base_url / api_key 為必要設定；dimension 用於驗證 API 回傳向量維度。
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
+    embedding_dimension: int = 0
 
     # --- Qdrant ---
     qdrant_url: str = "http://qdrant:6333"

@@ -60,7 +60,12 @@ class LLMClient:
     def model(self) -> str:
         return self._settings.llm_model
 
-    async def complete(self, messages: list[dict]) -> str:
+    async def complete(
+        self,
+        messages: list[dict],
+        *,
+        extra_body: dict | None = None,
+    ) -> str:
         """呼叫 Chat Completions 並回傳非空文字內容。
 
         錯誤分類（§3.4）：
@@ -73,11 +78,18 @@ class LLMClient:
             raise LLMNotConfiguredError()
 
         try:
+            request_kwargs = {
+                "model": self._settings.llm_model,
+                "messages": messages,
+                "temperature": self._settings.llm_temperature,
+                "max_tokens": self._settings.llm_max_tokens,
+            }
+
+            if extra_body is not None:
+                request_kwargs["extra_body"] = extra_body
+
             response = await self._client.chat.completions.create(
-                model=self._settings.llm_model,
-                messages=messages,
-                temperature=self._settings.llm_temperature,
-                max_tokens=self._settings.llm_max_tokens,
+                **request_kwargs
             )
         except APITimeoutError as exc:
             # 只記錄型別，不記錄可能含敏感資訊的完整訊息。
@@ -100,9 +112,30 @@ class LLMClient:
             logger.warning("LLM returned empty choices")
             raise LLMEmptyResponseError()
 
-        content = choices[0].message.content
+        message = choices[0].message
+        content = message.content
+
         if content is None or not content.strip():
-            logger.warning("LLM returned empty content")
+            finish_reason = getattr(choices[0], "finish_reason", None)
+
+            reasoning_content = getattr(message, "reasoning_content", None)
+
+            if reasoning_content is None:
+                extra = getattr(message, "model_extra", None) or {}
+                reasoning_content = extra.get("reasoning_content")
+
+            reasoning_chars = (
+                len(reasoning_content)
+                if isinstance(reasoning_content, str)
+                else 0
+            )
+
+            logger.warning(
+                "LLM returned empty content: finish_reason=%s reasoning_chars=%d",
+                finish_reason,
+                reasoning_chars,
+            )
+
             raise LLMEmptyResponseError()
 
         return content

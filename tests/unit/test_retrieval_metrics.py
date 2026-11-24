@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from evaluation.v11.case_schema import EvaluationCaseV11, EvidenceSpan
+from evaluation.v11.metric_config import MetricConfig
 from evaluation.v11.retrieval_metrics import (
     CaseRetrieval,
     IndexChunk,
@@ -44,6 +45,10 @@ def run(case_retrievals, **kw):
     return {(m.metric_name, m.scope, m.query_type): m for m in te.metrics}, te
 
 
+def run_with_cfg(case_retrievals, cfg: MetricConfig, **kw):
+    return run(case_retrievals, metric_config=cfg, **kw)
+
+
 def m(metrics, name, scope="aggregate", qt=None):
     return metrics[(name, scope, qt)]
 
@@ -55,7 +60,6 @@ def test_strong_hit_at_1():
     metrics, _ = run([CaseRetrieval(c, results, 5)])
     assert m(metrics, "strong_evidence_hit_at_1").value == 1.0
     assert m(metrics, "relevant_context_hit_at_1").value == 1.0
-    assert m(metrics, "recall_at_1").value == 1.0
 
 
 def test_relevant_at_rank3_not_strong_at_1_and_mrr():
@@ -326,7 +330,7 @@ def test_empty_dataset_no_crash():
 def test_zero_answerable_denominator():
     c = case(cid="u", qt="unanswerable", answerable=False, evidence=[])
     metrics, _ = run([CaseRetrieval(c, [], 5)])
-    assert m(metrics, "recall_at_1").computable is False
+    assert m(metrics, "relevant_context_hit_at_1").computable is False
     assert m(metrics, "unanswerable_false_positive_rate").computable is True
 
 
@@ -359,3 +363,128 @@ def test_index_point_count_and_build_time_metrics():
                      point_count=10, index_build_time_ms=123)
     assert m(metrics, "index_point_count").value == 10.0
     assert m(metrics, "index_build_time_ms").value == 123.0
+
+
+# --- v1.1 retrieval metric semantic fixes ---
+# recall_at_* 已從 v1.1 retrieval evaluator 移除（與 relevant_context_hit_at_* 重複）。
+# Hit@K 與 NDCG 維持原本固定 cutoff 行為：candidate 因為較小 top_k 而無法取得較後順位
+# relevant result，會反映為 metric 較差，而不是 metric 不存在或 non-computable。
+def test_no_recall_at_metrics_emitted():
+    c = case(evidence=[ev()])
+    results = [rr(1, provenance=[prov(0, 100)], text="E102")]
+    metrics, _ = run([CaseRetrieval(c, results, 5)])
+    for k in (1, 3, 5):
+        assert (f"recall_at_{k}", "aggregate", None) not in metrics
+
+
+def test_aggregate_hit_at_k_fixed_cutoff_when_top_k_3():
+    """cfg.top_k=3 時：aggregate Hit@1 / Hit@3 / Hit@5 仍固定輸出。
+
+    rank 1 已 relevant → Hit@1 = Hit@3 = Hit@5 = 1（Hit@K 是 top-K 內是否
+    存在至少一筆 relevant 的 case-level 指標；rank 1 命中時所有 K >= 1 都為 1）。
+    """
+    cfg = MetricConfig(top_k=3, ndcg_k=5)
+    c = case(evidence=[ev()])
+    results = [rr(1, provenance=[prov(0, 100)], text="E102")]
+    metrics, _ = run_with_cfg([CaseRetrieval(c, results, 5)], cfg)
+    assert m(metrics, "strong_evidence_hit_at_1").value == 1.0
+    assert m(metrics, "strong_evidence_hit_at_3").value == 1.0
+    assert m(metrics, "strong_evidence_hit_at_5").value == 1.0
+    assert m(metrics, "relevant_context_hit_at_1").value == 1.0
+    assert m(metrics, "relevant_context_hit_at_3").value == 1.0
+    assert m(metrics, "relevant_context_hit_at_5").value == 1.0
+
+
+def test_aggregate_hit_at_k_zero_when_top_k_3_no_relevant_in_retrieved():
+    """cfg.top_k=3、實際 retrieved rank 1~3 全部 irrelevant 時：
+    Hit@3 = Hit@5 = 0（Hit@5 與 Hit@3 相同，因為 candidate 沒有 rank 4、5）。
+
+    註：理論上若 index universe 中存在 rank 4 的 relevant chunk，cfg.top_k=3 的
+    serving configuration 不會回傳它，因此 Hit@5 自然為 0；不需在 CaseRetrieval
+    人工塞 rank 4。
+    """
+    cfg = MetricConfig(top_k=3, ndcg_k=5)
+    c = case(evidence=[ev(section="S")])
+    results = [
+        rr(1, sha="sha-x", doc_id="doc-x", provenance=[prov(sha="sha-x", section="Z")], text="n"),
+        rr(2, sha="sha-x", doc_id="doc-x", provenance=[prov(sha="sha-x", section="Z")], text="n"),
+        rr(3, sha="sha-x", doc_id="doc-x", provenance=[prov(sha="sha-x", section="Z")], text="n"),
+    ]
+    metrics, _ = run_with_cfg([CaseRetrieval(c, results, 5)], cfg)
+    assert m(metrics, "relevant_context_hit_at_3").value == 0.0
+    assert m(metrics, "relevant_context_hit_at_5").value == 0.0
+    assert m(metrics, "strong_evidence_hit_at_3").value == 0.0
+    assert m(metrics, "strong_evidence_hit_at_5").value == 0.0
+
+
+def test_per_query_type_hit_at_k_fixed_cutoff_when_top_k_3():
+    """cfg.top_k=3 時：per-query-type Hit@1 / Hit@5 仍固定輸出。
+
+    兩個 case 的 rank 1 都已 relevant → Hit@1 = Hit@5 = 1（Hit@K 是 case-level
+    指標，rank 1 命中時所有 K >= 1 都為 1）。
+    """
+    cfg = MetricConfig(top_k=3, ndcg_k=5)
+    c1 = case(cid="a", qt="exact_code", evidence=[ev(section="S")])
+    c2 = case(cid="b", qt="semantic", evidence=[ev(section="S")], q="語意查詢")
+    metrics, _ = run_with_cfg([
+        CaseRetrieval(c1, [rr(1, provenance=[prov(0, 100, section="S")], text="x")], 5),
+        CaseRetrieval(c2, [rr(1, provenance=[prov(0, 100, section="S")], text="y")], 5),
+    ], cfg)
+    assert m(metrics, "relevant_context_hit_at_1", scope="query_type", qt="exact_code").value == 1.0
+    assert m(metrics, "relevant_context_hit_at_5", scope="query_type", qt="exact_code").value == 1.0
+    assert m(metrics, "relevant_context_hit_at_5", scope="query_type", qt="semantic").value == 1.0
+    # MRR / case_count 行為完全不變
+    assert m(metrics, "mrr", scope="query_type", qt="exact_code").value == 1.0
+    assert m(metrics, "case_count", scope="query_type", qt="exact_code").value == 1.0
+
+
+def test_ndcg_unchanged_when_ndcg_k_gt_top_k():
+    """cfg.ndcg_k=5、cfg.top_k=3 時：NDCG 仍依原本規則計算（DCG 用實際最多 3 筆，
+    IDCG 用固定 NDCG@5 ideal ranking），不因 retrieval depth 較小而標成 non-computable。
+
+    本 case：candidate 完整取回 index universe 中所有 3 個 relevant chunk → NDCG@5 = 1.0。
+    用來確認 ndcg_k > top_k 不會自動變 non-computable，且完整取回時仍可得到 NDCG=1。
+    """
+    cfg = MetricConfig(top_k=3, ndcg_k=5)
+    c = case(evidence=[ev(0, 100, section="S")])
+    universe = [uc(_L2(), chunk_index=0), uc(_L2(), chunk_index=1), uc(_L1(), chunk_index=2)]
+    retrieved = [
+        rr(1, chunk_index=0, provenance=_L2(), text="a"),
+        rr(2, chunk_index=1, provenance=_L2(), text="b"),
+        rr(3, chunk_index=2, provenance=_L1(), text="c"),
+    ]
+    metrics, _ = run_with_cfg([CaseRetrieval(c, retrieved, 5)], cfg, index_universe=universe)
+    ndcg = m(metrics, "graded_ndcg_at_5")
+    assert ndcg.computable is True
+    assert ndcg.value == pytest.approx(1.0)
+    assert ndcg.not_computable_reason is None
+    assert m(metrics, "graded_ndcg_computable_count").value == 1.0
+    assert m(metrics, "graded_ndcg_non_computable_count").value == 0.0
+
+
+def test_ndcg_truncation_penalty_when_top_k_3_misses_relevant():
+    """cfg.top_k=3、cfg.ndcg_k=5、index universe 有 4 個正 gain relevant chunk，
+    candidate 只取回 3 筆（漏掉 1 個）→ graded_ndcg_at_5 computable=True 且 value < 1.0。
+
+    目的：確認較小 serving top_k 漏掉 index universe 中仍存在的 relevant evidence
+    會透過固定 NDCG@5 自然受到懲罰，而不是變成 non-computable。
+    """
+    cfg = MetricConfig(top_k=3, ndcg_k=5)
+    c = case(evidence=[ev(0, 100, section="S")])
+    # 4 個 L2 relevant chunk（gain=3），candidate 只取回前 3 個 → 漏掉 chunk_index=3
+    universe = [
+        uc(_L2(), chunk_index=0),
+        uc(_L2(), chunk_index=1),
+        uc(_L2(), chunk_index=2),
+        uc(_L2(), chunk_index=3),
+    ]
+    retrieved = [
+        rr(1, chunk_index=0, provenance=_L2(), text="a"),
+        rr(2, chunk_index=1, provenance=_L2(), text="b"),
+        rr(3, chunk_index=2, provenance=_L2(), text="c"),
+    ]
+    metrics, _ = run_with_cfg([CaseRetrieval(c, retrieved, 5)], cfg, index_universe=universe)
+    ndcg = m(metrics, "graded_ndcg_at_5")
+    assert ndcg.computable is True
+    assert ndcg.not_computable_reason is None
+    assert 0.0 <= ndcg.value < 1.0

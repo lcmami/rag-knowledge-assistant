@@ -127,6 +127,9 @@ class RealTrialServiceProvider:
 
             embedding = EmbeddingService(
                 model_name=settings.embedding_model,
+                base_url=settings.embedding_base_url,
+                api_key=settings.embedding_api_key,
+                dimension=settings.embedding_dimension,
                 query_instruction=settings.embedding_query_instruction,
                 max_tokens=settings.embedding_max_tokens,
             )
@@ -260,6 +263,38 @@ class RealTrialServiceProvider:
         context_added = 0
         context_reduced = 0
 
+        # 跨文件 chunk batching：避免每份文件各呼叫一次遠端 Embedding API。
+        embedding_batch_size = 512
+        pending_chunks: list = []
+        embedding_batch_count = 0
+        embedded_chunk_count = 0
+        embedding_stage_seconds = 0.0
+        upsert_stage_seconds = 0.0
+
+        def _flush_batch(batch: list, *, force_print: bool = False) -> None:
+            nonlocal embedding_batch_count, embedded_chunk_count
+            nonlocal embedding_stage_seconds, upsert_stage_seconds
+            if not batch:
+                return
+            t0 = time.perf_counter()
+            vectors = caching.embed_documents([c.text for c in batch])
+            embedding_stage_seconds += time.perf_counter() - t0
+            embedded_chunk_count += len(batch)
+            t1 = time.perf_counter()
+            store.upsert_chunks(batch, vectors)
+            upsert_stage_seconds += time.perf_counter() - t1
+            embedding_batch_count += 1
+            # progress：第 1 batch / 之後每 10 batch / 最後一個 batch。
+            if (
+                embedding_batch_count == 1
+                or embedding_batch_count % 10 == 0
+                or force_print
+            ):
+                print(
+                    f"[INDEX] batches={embedding_batch_count} chunks={embedded_chunk_count}",
+                    flush=True,
+                )
+
         for name, abs_path in files:
             with open(abs_path, "rb") as f:
                 raw = f.read()
@@ -285,16 +320,31 @@ class RealTrialServiceProvider:
             outcome = strategy.chunk(ctx)
             if not outcome.chunks:
                 continue
-            vectors = caching.embed_documents([c.text for c in outcome.chunks])
-            store.upsert_chunks(outcome.chunks, vectors)
             total_chunks += len(outcome.chunks)
             fallback_count += outcome.fallback_count
             fallback_reasons.extend(outcome.fallback_reasons)
             context_added += outcome.context_added_count
             context_reduced += outcome.context_reduced_count
+            # 將本文件 chunks 加入 pending buffer；滿 batch 就 flush。
+            pending_chunks.extend(outcome.chunks)
+            while len(pending_chunks) >= embedding_batch_size:
+                batch = pending_chunks[:embedding_batch_size]
+                pending_chunks = pending_chunks[embedding_batch_size:]
+                _flush_batch(batch)
+
+        # 所有 files 處理完成後，flush 最後不足 batch 的 pending_chunks。
+        if pending_chunks:
+            _flush_batch(pending_chunks, force_print=True)
+            pending_chunks = []
 
         build_time_ms = int((time.perf_counter() - start) * 1000)
         point_count = self._client.count(collection_name).count
+
+        print(
+            f"[INDEX] DONE chunks={total_chunks} batches={embedding_batch_count} "
+            f"embedding_s={embedding_stage_seconds:.3f} upsert_s={upsert_stage_seconds:.3f}",
+            flush=True,
+        )
 
         # Slice 4：retrieval 改由版本化 RetrievalStrategy 執行（dense / identifier_aware）；
         # query embedding 於 retrieve() 一次算好、走底層不快取（§十七.10 / §十一.5）。

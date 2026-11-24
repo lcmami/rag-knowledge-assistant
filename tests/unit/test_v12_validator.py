@@ -63,6 +63,7 @@ def _validate(validator, run_config, payload, tested=None):
         parent=run_config.baseline,
         tested_config_hashes=tested or set(),
         segment_texts=SEGMENTS,
+        tune_failure_types={},
     )
 
 

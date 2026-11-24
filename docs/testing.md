@@ -30,7 +30,7 @@
 | 層級 | 路徑 | 外部依賴 | 說明 |
 | --- | --- | --- | --- |
 | Unit | `tests/unit/` | **無** | Fake Embedding / VectorStore / LLM + 暫存 SQLite 與上傳目錄 |
-| Integration（非 LLM） | `tests/integration/` | **Qdrant** + 本機 sentence-transformers 模型 | 真實索引／檢索／trial runner／optimizer search／deploy alias |
+| Integration（非 LLM） | `tests/integration/` | **Qdrant** + OpenAI-compatible Embedding API（`EMBEDDING_*`，v1.3 起） | 真實索引／檢索／trial runner／optimizer search／deploy alias |
 | Integration（LLM） | `tests/integration/test_rag_llm_smoke.py`、`test_v12_agent_llm_smoke.py` | **外部 OpenAI-compatible Provider** | 標記 `llm_integration`；未設定 `LLM_*` 時自動 skip |
 | E2E | `tests/e2e/` | 已啟動的 API（Playwright + Chromium） | Retrieval Optimizer UI |
 
@@ -40,7 +40,7 @@
 
 | Marker | 意義 |
 | --- | --- |
-| `integration` | 需要真實 Qdrant 與 sentence-transformers 模型的整合測試 |
+| `integration` | 需要真實 Qdrant 與 Embedding API（v1.3 起為 OpenAI-compatible，見 `EMBEDDING_*`）的整合測試 |
 | `llm_integration` | 需要真實 OpenAI-compatible LLM endpoint 的 smoke test（**未設定環境變數時 skip**） |
 
 `llm_integration` 是**明確的成本與可重現性邊界**：預設驗證流程一律以 `-m "not llm_integration"`
