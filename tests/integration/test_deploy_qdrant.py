@@ -47,6 +47,9 @@ def embedding():
         model_name=s.embedding_model,
         query_instruction=s.embedding_query_instruction,
         max_tokens=s.embedding_max_tokens,
+        base_url=s.embedding_base_url,
+        api_key=s.embedding_api_key,
+        dimension=s.embedding_dimension,
     )
 
 

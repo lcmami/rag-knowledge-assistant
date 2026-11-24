@@ -188,7 +188,8 @@ def parse_config(raw: Any) -> CorpusConfig:
     output_root = _require(raw, "output_root", (str,))
     if not output_root.strip():
         raise CorpusConfigError("config 欄位 'output_root' 不得為空")
-    if os.path.isabs(output_root):
+    # Python 3.13+ 在 Windows 上 os.path.isabs("/abs") 為 False，需另判根目錄開頭。
+    if os.path.isabs(output_root) or output_root.startswith(("/", "\\")):
         # 絕對路徑會讓 config 綁死單一機器；一律以 repo root 為基準的相對路徑。
         raise CorpusConfigError(f"config 欄位 'output_root' 必須為 repo 相對路徑，得到 {output_root!r}")
 

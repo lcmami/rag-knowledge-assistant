@@ -93,6 +93,9 @@ def cmd_stats(args) -> int:
         model_name=settings.embedding_model,
         query_instruction=settings.embedding_query_instruction,
         max_tokens=settings.embedding_max_tokens,
+        base_url=settings.embedding_base_url,
+        api_key=settings.embedding_api_key,
+        dimension=settings.embedding_dimension,
     )
     chunk_config = dict(stats_module.PILOT_CHUNK_CONFIG)
     chunk_config.update(

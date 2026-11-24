@@ -109,9 +109,11 @@ def qdrant_url():
 
 @pytest.fixture(scope="session")
 def cached_embedding():
-    """本機**已快取**的 embedding 模型；未快取即 skip（絕不下載）。"""
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
-    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    """v1.3 起為 OpenAI-compatible Embedding API client。
+
+    建構不需連線；``count_tokens`` 為本地計算，chunking 類測試不需 API。
+    需要真正產生向量的測試請改用 ``api_embedding``（未設定 API 時 skip）。
+    """
     try:
         from app.core.config import Settings
         from app.services.embedding_service import EmbeddingService
@@ -121,11 +123,24 @@ def cached_embedding():
             model_name=settings.embedding_model,
             query_instruction=settings.embedding_query_instruction,
             max_tokens=settings.embedding_max_tokens,
+            base_url=settings.embedding_base_url,
+            api_key=settings.embedding_api_key,
+            dimension=settings.embedding_dimension,
         )
-        service.count_tokens("暖機")  # 觸發載入；未快取時在此失敗
     except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"本機未快取 embedding 模型（不下載）：{exc}")
+        pytest.skip(f"無法建立 EmbeddingService：{exc}")
     return service
+
+
+@pytest.fixture(scope="session")
+def api_embedding(cached_embedding):
+    """需要真實向量的測試使用；未設定 EMBEDDING_BASE_URL / EMBEDDING_API_KEY 即 skip。"""
+    from app.core.config import Settings
+
+    settings = Settings(app_env="optimizer")
+    if not (settings.embedding_base_url and settings.embedding_api_key):
+        pytest.skip("未設定 EMBEDDING_BASE_URL / EMBEDDING_API_KEY（v1.3 Embedding API）")
+    return cached_embedding
 
 
 @pytest.fixture(scope="session")
@@ -226,10 +241,10 @@ def _make_provider(qdrant_url, workdir, embedding, reranker=None, tag="slicec"):
 
 
 @pytest.fixture(scope="session")
-def indexed(qdrant_url, tmp_path_factory, cached_embedding, cached_reranker, corpus_files):
+def indexed(qdrant_url, tmp_path_factory, api_embedding, cached_reranker, corpus_files):
     """建一次索引供多個唯讀測試共用；結束時只刪自己建立的 collection。"""
     workdir = tmp_path_factory.mktemp("indexed")
-    provider = _make_provider(qdrant_url, workdir, cached_embedding, cached_reranker, tag="idx")
+    provider = _make_provider(qdrant_url, workdir, api_embedding, cached_reranker, tag="idx")
     collection = f"optimizer_slicec_{unique_token()}"
     try:
         trial = _trial_config("slice-c", DENSE)
@@ -545,10 +560,10 @@ def test_retrieval_sanity_probes(indexed):
 # 10. 唯一命名 collection 的建立與清理
 # --------------------------------------------------------------------------
 def test_unique_collection_is_created_and_fully_cleaned_up(
-    qdrant_url, tmp_path, cached_embedding, corpus_files
+    qdrant_url, tmp_path, api_embedding, corpus_files
 ):
     """只建立、只清理自己的 collection；清理後以有限輪詢確認真的消失。"""
-    provider = _make_provider(qdrant_url, tmp_path, cached_embedding, tag="cleanup")
+    provider = _make_provider(qdrant_url, tmp_path, api_embedding, tag="cleanup")
     collection = f"optimizer_sliceccleanup_{unique_token()}"
     others_before = [
         n for n in list_collections(provider._client) if n != collection
@@ -594,7 +609,7 @@ def test_production_collection_is_untouched(production_collection_guard, indexed
 # 12. dense -> cross-encoder rerank wiring smoke
 # --------------------------------------------------------------------------
 def test_dense_to_rerank_wiring_smoke(
-    qdrant_url, tmp_path, cached_embedding, cached_reranker, corpus_files
+    qdrant_url, tmp_path, api_embedding, cached_reranker, corpus_files
 ):
     """rerank stage 能接受法律語料的 chunk 並產出合法結果。
 
@@ -603,7 +618,7 @@ def test_dense_to_rerank_wiring_smoke(
     from evaluation.v11.retrieval.reranker import sigmoid
 
     provider = _make_provider(
-        qdrant_url, tmp_path, cached_embedding, cached_reranker, tag="rerank"
+        qdrant_url, tmp_path, api_embedding, cached_reranker, tag="rerank"
     )
     collection = f"optimizer_slicecrr_{unique_token()}"
     try:

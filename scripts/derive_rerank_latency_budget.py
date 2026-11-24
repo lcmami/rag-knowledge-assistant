@@ -1187,10 +1187,19 @@ def main() -> int:
     from app.services.embedding_service import EmbeddingService
 
     print(f"[1/6] 載入 embedding model {EMBEDDING_MODEL} ...", flush=True)
+    # v1.3 起 Embedding 走 OpenAI-compatible API：模型名稱仍固定為 v1.2.1 量測時的
+    # EMBEDDING_MODEL，僅端點／金鑰／維度取自環境設定。重現 v1.2.1 數值需該端點提供同一模型，
+    # 且網路延遲會計入結果，與 v1.2.1 本地量測不可直接比較。
+    from app.core.config import Settings
+
+    endpoint = Settings(app_env="optimizer")
     embedding = EmbeddingService(
         model_name=EMBEDDING_MODEL,
         query_instruction=EMBEDDING_QUERY_INSTRUCTION,
         max_tokens=EMBEDDING_MAX_TOKENS,
+        base_url=endpoint.embedding_base_url,
+        api_key=endpoint.embedding_api_key,
+        dimension=endpoint.embedding_dimension,
     )
 
     print("[2/6] 切分受版控示範語料 ...", flush=True)
