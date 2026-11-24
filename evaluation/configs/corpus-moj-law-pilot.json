@@ -1,0 +1,12 @@
+{
+  "provider": "moj_law",
+  "endpoint": "https://law.moj.gov.tw/api/Ch/Law/JSON",
+  "timeout_seconds": 120,
+  "max_retries": 3,
+  "retry_backoff_seconds": 2.0,
+  "max_laws": 100,
+  "category_prefix": null,
+  "include_repealed": true,
+  "order_by": "pcode",
+  "output_root": "evaluation/corpora/moj-law"
+}

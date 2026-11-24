@@ -423,3 +423,5 @@ deterministic promotion gate、匿名化 Audit 與 `show` CLI、安全的 collec
 | [docs/testing.md](docs/testing.md) | **測試**：測試規模與誠實度說明、pytest markers、各層級執行方式與外部依賴 |
 | [PROJECT_SPEC.md](PROJECT_SPEC.md) | **v1.0 歷史規格／設計參考**：資料模型、解析／Chunking 規則、匯入與 RAG 流程、Prompt 規格、測試策略——這些部分仍具參考價值；其 §19 API 章節記錄的是 v1.0 當時狀態，**目前 HTTP API 以 [docs/api-reference.md](docs/api-reference.md) 為準** |
 | [evaluation/baseline-v1.1.md](evaluation/baseline-v1.1.md) | v1.1 Slice 0 Baseline：15 案例逐題 Top-5、E102／D900 排名壓力測試、硬限制門檻推導與可信度標註 |
+| [docs/external-corpus-api-plan.md](docs/external-corpus-api-plan.md) | **外部法規 corpus 計畫**：MOJ 全國法規資料庫來源契約、正規化規則、可重現 snapshot 與 corpus fingerprint、Slice A–D scope（**離線 evaluation 基礎建設，production 不使用外部語料**） |
+| [evaluation/corpus-moj-law-pilot-report.md](evaluation/corpus-moj-law-pilot-report.md) | **外部 corpus pilot 結果**：100 部法規 snapshot 的 corpus statistics、chunk／token 分布、混淆性量測、retrieval sanity 觀察與 pilot 結論（**非品質評測**） |

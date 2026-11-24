@@ -175,6 +175,9 @@ def build_services(config: EvaluationConfig, workdir: str, embedding=None):
             model_name=settings.embedding_model,
             query_instruction=settings.embedding_query_instruction,
             max_tokens=settings.embedding_max_tokens,
+            base_url=settings.embedding_base_url,
+            api_key=settings.embedding_api_key,
+            dimension=settings.embedding_dimension,
         )
 
     client = create_qdrant_client(config.qdrant_url)
