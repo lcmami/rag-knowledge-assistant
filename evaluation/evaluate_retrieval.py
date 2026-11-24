@@ -19,6 +19,9 @@ v1.1 Slice 0：本檔改為 :mod:`evaluation.runner` 的薄包裝，核心邏輯
               [--keep-collection]      # 保留 evaluation collection（預設執行後刪除）
 
 注意：預設使用獨立 collection「factory_evaluation」，不會觸碰正式 factory_knowledge。
+
+輸出：``evaluation/runs/results.json``（runtime 產物，已被 .gitignore 排除）。
+v1.0 當時的結果快照保存於 ``docs/reports/results.json``（historical evidence，本腳本不會覆寫）。
 """
 from __future__ import annotations
 
@@ -36,7 +39,7 @@ from evaluation.schemas import EvaluationConfig  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAMPLE_DIR = os.path.join(ROOT, "sample_docs")
 QUESTIONS_PATH = os.path.join(ROOT, "evaluation", "questions.json")
-RESULTS_PATH = os.path.join(ROOT, "evaluation", "results.json")
+RESULTS_PATH = os.path.join(ROOT, "evaluation", "runs", "results.json")
 
 
 def build_config(args: argparse.Namespace) -> EvaluationConfig:
@@ -102,6 +105,7 @@ def run_cli(argv: list[str] | None = None) -> dict:
     report = runner.run_evaluation(config)
     legacy = report.to_legacy_dict()
 
+    os.makedirs(os.path.dirname(RESULTS_PATH), exist_ok=True)
     with open(RESULTS_PATH, "w", encoding="utf-8") as f:
         json.dump(legacy, f, ensure_ascii=False, indent=2)
 

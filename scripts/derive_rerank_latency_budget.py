@@ -89,8 +89,10 @@ RETRIEVAL_TOP_K = 5
 CORPUS_DIRS = ("sample_docs", "evaluation/fixtures")
 DATASET_PATH = "evaluation/datasets/v1.1/cases-v2.json"
 
-OUT_JSON = "evaluation/rerank-latency-baseline-v1.2.1.json"
-OUT_MD = "evaluation/rerank-latency-baseline-v1.2.1.md"
+#: 預設輸出為 runtime 產物（gitignored）。v1.2.1 R0 當時的結果快照保存於
+#: docs/reports/rerank-latency-baseline-v1.2.1.{json,md}（historical evidence，不得被重跑覆寫）。
+OUT_JSON = "evaluation/runs/rerank-latency-baseline-v1.2.1.json"
+OUT_MD = "evaluation/runs/rerank-latency-baseline-v1.2.1.md"
 
 #: 樣本數低於此值一律標為 low confidence（沿用 generate_baseline.py 的慣例）。
 CONFIDENCE_MIN_SAMPLES = 30
@@ -1382,11 +1384,13 @@ def main() -> int:
     }
 
     out_json = os.path.join(_ROOT, args.out_json)
+    os.makedirs(os.path.dirname(out_json), exist_ok=True)
     with open(out_json, "w", encoding="utf-8") as fh:
         fh.write(canonical_json(report))
         fh.write("\n")
 
     out_md = os.path.join(_ROOT, args.out_md)
+    os.makedirs(os.path.dirname(out_md), exist_ok=True)
     with open(out_md, "w", encoding="utf-8") as fh:
         fh.write(render_markdown(report))
 

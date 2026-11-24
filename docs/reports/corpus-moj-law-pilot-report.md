@@ -13,9 +13,9 @@
 > Production 行為完全未變更；`app/**` 與 `evaluation/v11/**` 零修改。
 
 相關文件：
-- [docs/external-corpus-api-plan.md](../docs/external-corpus-api-plan.md) — 完整計畫（Slice A–D）
-- [docs/testing.md](../docs/testing.md) — 測試分層與 marker
-- [docs/v1.2.1-rerank-design.md](../docs/v1.2.1-rerank-design.md) — Cross-Encoder rerank 設計
+- [docs/external-corpus-api-plan.md](../external-corpus-api-plan.md) — 完整計畫（Slice A–D）
+- [docs/testing.md](../testing.md) — 測試分層與 marker
+- [docs/v1.2.1-rerank-design.md](../v1.2.1-rerank-design.md) — Cross-Encoder rerank 設計
 
 ---
 
