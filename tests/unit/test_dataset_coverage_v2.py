@@ -270,8 +270,30 @@ def test_every_answerable_evidence_offset_is_grounded(canonical_docs):
 # --------------------------------------------------------------------------
 # Config 與 resume 隔離
 # --------------------------------------------------------------------------
+_P95_LATENCY_METRIC = "p95_retrieval_latency_ms"
+
+
+def _strip_p95_latency(node):
+    """移除所有引用 p95 latency 的 list 項目。
+
+    v1.3 起 Embedding 改走外部 API，網路延遲使 v1 的 86 ms 上限失去意義，
+    因此 v2 移除了 p95 latency 的 constraint / objective / tie-break；
+    v1 保留原樣以維持既有 config_hash 與 resume 相容。
+    """
+    if isinstance(node, dict):
+        return {k: _strip_p95_latency(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [
+            _strip_p95_latency(item)
+            for item in node
+            if not (isinstance(item, dict) and _P95_LATENCY_METRIC in item.values())
+        ]
+    return node
+
+
 def test_v2_config_differs_only_in_dataset_and_name():
-    a, b = _load(CFG_V1), _load(CFG_V2)
+    a, b = _strip_p95_latency(_load(CFG_V1)), _load(CFG_V2)
+    assert _strip_p95_latency(b) == b, "v2 不應再包含 p95 latency 項目"
     diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
     assert diff == ["dataset_path", "search_name"], diff
     # 門檻與信心度不得因為知道前次結果而調整

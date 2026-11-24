@@ -38,6 +38,7 @@ def _context(rc, previous_rounds=()):
                 query_type="exact_code",
                 case_status="miss",
                 first_relevant_rank=None,
+                failure_type="miss",
                 expected_evidence_excerpt="alarm code D900",
             )
         ],
