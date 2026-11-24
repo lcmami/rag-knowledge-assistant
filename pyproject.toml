@@ -26,7 +26,7 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
-    "integration: 需要真實 Qdrant 與 sentence-transformers 模型的整合測試",
+    "integration: 需要真實 Qdrant 與 Embedding API 的整合測試",
     "llm_integration: 需要真實 OpenAI-compatible LLM endpoint 的 smoke test（未設定環境變數時 skip）",
     "external_api: 需要真實外部公開 API（MOJ 全國法規資料庫）的契約漂移偵測；預設不執行，須顯式 -m external_api",
 ]

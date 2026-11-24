@@ -130,7 +130,7 @@ def test_direction_inferred_when_not_an_objective():
     assert oc.metric_direction(MetricRef("p95_retrieval_latency_ms")) == DIRECTION_MINIMIZE
     assert oc.metric_direction(MetricRef("duplicate_ratio")) == DIRECTION_MINIMIZE
     assert oc.metric_direction(MetricRef("confusable_code_error_rate")) == DIRECTION_MINIMIZE
-    assert oc.metric_direction(MetricRef("recall_at_5")) == DIRECTION_MAXIMIZE
+    assert oc.metric_direction(MetricRef("relevant_context_hit_at_5")) == DIRECTION_MAXIMIZE
 
 
 # --------------------------------------------------------------------------

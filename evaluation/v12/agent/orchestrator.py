@@ -534,11 +534,20 @@ class AgentOrchestrator:
             proposal = parse_proposal(raw)
         except ProposalParseError as exc:
             return None, None, f"parse_error:{exc}", raw
+        payload = context.to_prompt_payload()
+
+        tune_failure_types = {
+            item["case_id"]: item["failure_type"]
+            for item in payload.get("tune_failures", [])
+            if item.get("case_id") and item.get("failure_type")
+        }
+
         vres = self._validator.validate(
             proposal,
             parent=parent,
             tested_config_hashes=tested_hashes,
             segment_texts=context.segment_texts(),
+            tune_failure_types=tune_failure_types,
         )
         return proposal, vres, None, raw
 

@@ -150,9 +150,9 @@ def _metrics(trial_id: str, *, baseline: bool) -> list[TrialMetric]:
         m("unanswerable_false_positive_rate", 0.0, n=2),
         m("ndcg_at_5", 0.8367 if baseline else 0.9193, n=7),      # recommendation 改善 +0.0826
         m("mrr", 1.0, n=7),
-        m("recall_at_1", 0.8, n=7),
-        m("recall_at_3", 1.0, n=7),
-        m("recall_at_5", 1.0, n=7),
+        m("relevant_context_hit_at_1", 0.8, n=7),
+        m("relevant_context_hit_at_3", 1.0, n=7),
+        m("relevant_context_hit_at_5", 1.0, n=7),
         m("duplicate_ratio", 0.0, n=7),
         m("latency_p50_ms", 40.0 if baseline else 45.0, n=7),
         m("latency_p95_ms", 47.6 if baseline else 67.9, n=7),     # 變差但仍 < 86 ceiling

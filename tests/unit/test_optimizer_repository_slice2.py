@@ -117,14 +117,14 @@ def test_metrics_and_case_results_crud_and_json_roundtrip(tmp_path):
         TrialMetric(trial_id="t1", metric_name="graded_ndcg_at_5", scope="aggregate",
                     query_type=None, value=None, computable=False,
                     not_computable_reason="no_offset_grounded_gold_evidence"),
-        TrialMetric(trial_id="t1", metric_name="recall_at_1", scope="query_type",
+        TrialMetric(trial_id="t1", metric_name="relevant_context_hit_at_1", scope="query_type",
                     query_type="exact_code", value=1.0, sample_count=2),
     ]
     repo.save_trial_metrics("t1", metrics)
     got = {(m.metric_name, m.scope, m.query_type): m for m in repo.get_trial_metrics("t1")}
     assert got[("mrr", "aggregate", None)].value == 0.5
     assert got[("graded_ndcg_at_5", "aggregate", None)].computable is False
-    assert got[("recall_at_1", "query_type", "exact_code")].value == 1.0
+    assert got[("relevant_context_hit_at_1", "query_type", "exact_code")].value == 1.0
 
     cases = [TrialCaseResult(trial_id="t1", case_id="c1", case_status="relevant_hit",
                              query_type="exact_code", answerable=True, latency_ms=12,

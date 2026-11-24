@@ -70,6 +70,7 @@ class TuneFailureView:
     query_type: str
     case_status: str
     first_relevant_rank: Optional[int]
+    failure_type: str
     expected_evidence_excerpt: str = ""
     actual_top_excerpts: tuple[str, ...] = ()
     identifier_detail: dict[str, Any] = field(default_factory=dict)
@@ -169,6 +170,7 @@ def build_agent_context(
                 "query_type": fcase.query_type,
                 "case_status": fcase.case_status,
                 "first_relevant_rank": fcase.first_relevant_rank,
+                "failure_type": fcase.failure_type,
                 "expected_evidence": _wrap(
                     _cap(fcase.expected_evidence_excerpt, caps["evidence"])
                 ),

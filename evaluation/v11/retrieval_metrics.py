@@ -730,16 +730,13 @@ def evaluate_trial(
 
     metrics: list[TrialMetric] = []
 
-    # --- Evidence Hit / Recall@K + Strong / Relevant context（§12.1）---
+    # --- Evidence Hit / Strong / Relevant context（§12.1）---
     for k in (1, 3, 5):
         strong_hits, ans = _hit_at_k(scored_cases, k, level=2)
         rel_hits, _ = _hit_at_k(scored_cases, k, level=1)
         metrics.append(_metric(f"strong_evidence_hit_at_{k}", strong_hits, ans,
                                computable=bool(ans), reason="no_answerable_cases"))
         metrics.append(_metric(f"relevant_context_hit_at_{k}", rel_hits, ans,
-                               computable=bool(ans), reason="no_answerable_cases"))
-        # Recall@K == relevant context hit（單一相關來源）
-        metrics.append(_metric(f"recall_at_{k}", rel_hits, ans,
                                computable=bool(ans), reason="no_answerable_cases"))
 
     # --- MRR（§12.2）---

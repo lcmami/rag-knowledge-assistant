@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "run_name": "v12-agent-scifact",
+  "random_seed": 42,
+  "prompt_version": "v1",
+  "dataset_path": "evaluation/datasets/scifact_agent/cases-v1.json",
+  "corpus_paths": [
+    "evaluation/datasets/scifact_agent/corpus"
+  ],
+  "baseline": {
+    "chunk_config": {
+      "strategy": "current"
+    },
+    "retrieval_config": {
+      "strategy": "dense",
+      "top_k": 5,
+      "score_threshold": 0.55,
+      "candidate_multiplier": 3,
+      "candidate_cap": 50
+    }
+  },
+  "allowed_parameter_space": {
+    "chunk_strategies": [
+      "current",
+      "paragraph"
+    ],
+    "retrieval_strategies": [
+      "dense"
+    ],
+    "bounds": {
+      "top_k": [
+        3,
+        10
+      ],
+      "score_threshold": [
+        0.2,
+        0.7
+      ],
+      "target_chars": [
+        300,
+        1200
+      ],
+      "overlap_chars": [
+        0,
+        250
+      ]
+    },
+    "bool_fields": [
+      "prepend_section_title"
+    ]
+  },
+  "budget": {
+    "max_rounds": 4,
+    "max_llm_calls": 8,
+    "max_probe_questions": 3,
+    "max_parameter_changes": 2,
+    "no_improvement_rounds": 3,
+    "max_consecutive_rejections": 3,
+    "context_char_budget": 12000
+  },
+  "promotion": {
+    "hard_constraints": [
+      {
+        "name": "mrr_must_improve_vs_parent",
+        "metric": "mrr",
+        "scope": "aggregate",
+        "operator": ">=",
+        "baseline_delta": 0.001,
+        "safety_critical": false,
+        "on_not_computable": "fail"
+      }
+    ],
+    "comparator_ranking": [
+      {
+        "key": "constraint_pass_count",
+        "direction": "maximize"
+      },
+      {
+        "key": "mrr",
+        "direction": "maximize"
+      },
+      {
+        "key": "config_hash",
+        "direction": "minimize"
+      }
+    ]
+  }
+}

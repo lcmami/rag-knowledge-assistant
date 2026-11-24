@@ -39,6 +39,7 @@ def _context(rc):
                 query_type="exact_code",
                 case_status="miss",
                 first_relevant_rank=None,
+                failure_type="miss",
                 expected_evidence_excerpt="alarm code D900",
             )
         ],
@@ -160,11 +161,16 @@ def test_editable_current_config_copy_validates_with_single_change():
             "stop_recommendation": False,
         }
     )
+    tune_failure_types = {
+        f["case_id"]: f["failure_type"]
+        for f in ctx.to_prompt_payload().get("tune_failures", [])
+    }
     res = ProposalValidator(rc).validate(
         parse_proposal(raw),
         parent=rc.baseline,
         tested_config_hashes=set(),
         segment_texts=ctx.segment_texts(),
+        tune_failure_types=tune_failure_types,
     )
     assert res.ok, res.errors
     assert res.parameter_changes == ["retrieval.top_k: 5→6"]
@@ -180,10 +186,15 @@ def test_llm_planner_propose_parses_and_validates():
 
     raw = planner.propose(ctx)
     proposal = parse_proposal(raw)
+    tune_failure_types = {
+        f["case_id"]: f["failure_type"]
+        for f in ctx.to_prompt_payload().get("tune_failures", [])
+    }
     res = ProposalValidator(rc).validate(
         proposal,
         parent=rc.baseline,
         tested_config_hashes=set(),
         segment_texts=ctx.segment_texts(),
+        tune_failure_types=tune_failure_types,
     )
     assert res.ok, res.errors
