@@ -303,7 +303,7 @@ whether its own proposal wins. 驗收摘要不含 API key、完整 prompt、文�
 ## 已完成能力
 
 **RAG 核心（v1.0）** — PDF／Markdown／TXT 處理與 SHA-256 去重、SQLite 文件 Registry、
-Chunking 與 Token hard limit、本地 Embedding、Qdrant Top-K 與 Threshold 過濾、
+Chunking 與 Token hard limit、Embedding（v1.0–v1.2 為本地 `bge-small-zh-v1.5`，v1.3 起改為 OpenAI-compatible API）、Qdrant Top-K 與 Threshold 過濾、
 OpenAI-compatible LLM 問答、**Citation 驗證與無效 Citation fail-closed**、雙層拒答、
 Docker Compose 與 Health／Readiness、Unit／Integration 測試與 Retrieval Evaluation。
 

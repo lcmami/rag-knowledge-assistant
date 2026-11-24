@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CHENG MU 容器內一鍵部署腳本
+# 容器內一鍵部署腳本
 # 用法：把整個專案目錄複製到容器內，cd 進去，執行：
 #   bash deploy.sh
 set -euo pipefail
