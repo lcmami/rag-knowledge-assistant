@@ -48,6 +48,7 @@ def _failures():
             query_type="exact_code",
             case_status="miss",
             first_relevant_rank=None,
+            failure_type="confusable_confusion",
             expected_evidence_excerpt="alarm code D900 indicates an overheat fault",
             actual_top_excerpts=("unrelated chunk about D200",),
             identifier_detail={"conflicting_identifiers": ["D200"]},

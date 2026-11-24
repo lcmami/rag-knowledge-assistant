@@ -48,8 +48,12 @@ def stable_model_identifier(model_name: str) -> str:
     """
     if not model_name:
         return ""
-    looks_like_path = os.path.isabs(model_name) or ("\\" in model_name) or (
-        "/" in model_name and (os.sep in model_name or ":" in model_name)
+    # Python 3.13+ 在 Windows 上 os.path.isabs("/opt/x") 為 False，需另判 POSIX 絕對路徑。
+    looks_like_path = (
+        os.path.isabs(model_name)
+        or model_name.startswith("/")
+        or ("\\" in model_name)
+        or ("/" in model_name and (os.sep in model_name or ":" in model_name))
     )
     if looks_like_path:
         return os.path.basename(model_name.rstrip("/\\")) or model_name
