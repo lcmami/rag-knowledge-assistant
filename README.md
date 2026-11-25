@@ -418,6 +418,7 @@ deterministic promotion gate、匿名化 Audit 與 `show` CLI、安全的 collec
 | [docs/v1.1-retrieval-optimizer-architecture.md](docs/v1.1-retrieval-optimizer-architecture.md) | **v1.1 架構**：Module 邊界、兩個 Loop、index／query／eval 資料流、Trial isolation、Qdrant payload 與 SQLite DDL、Apply／Rollback 與 alias migration、設計取捨表 |
 | [docs/v1.1-retrieval-optimizer-requirements.md](docs/v1.1-retrieval-optimizer-requirements.md) | **v1.1 需求**：FR／NFR、eval case schema、Canonical Document 規則、metrics 定義與「合理 Top-5」選擇法、Safety Rules、Acceptance Criteria A–E |
 | [docs/v1.1-retrieval-optimizer-plan.md](docs/v1.1-retrieval-optimizer-plan.md) | v1.1 開發計畫 Slice 0–8：scope／測試／驗收／風險與全域禁止事項（historical） |
+| [docs/v1.2.1-rerank-runbook.md](docs/v1.2.1-rerank-runbook.md) | **v1.2.1 Rerank 操作手冊**：scope、已鎖定的設計決定（`rerank_strategy`／`rerank_top_n`）、各 Slice 結論與下一步動作（純離線層，production 零改動） |
 | [docs/developer-guide.md](docs/developer-guide.md) | **實作者指南**：環境變數全表、專案結構、前端、v1.1 optimizer CLI 與 Dataset Authoring、v1.2 agent CLI、Docker CLI profile、Optimizer UI 示範資料 |
 | [docs/api-reference.md](docs/api-reference.md) | **API Reference**：目前 main branch 的 HTTP API——23 個 registered endpoint、request／response schema、錯誤碼、Production 與 Evaluation 檢索差異 |
 | [docs/testing.md](docs/testing.md) | **測試**：測試規模與誠實度說明、pytest markers、各層級執行方式與外部依賴 |
@@ -426,3 +427,5 @@ deterministic promotion gate、匿名化 Audit 與 `show` CLI、安全的 collec
 | [docs/reports/baseline-v1.1.md](docs/reports/baseline-v1.1.md) | v1.1 Slice 0 Baseline：15 案例逐題 Top-5、E102／D900 排名壓力測試、硬限制門檻推導與可信度標註 |
 | [docs/external-corpus-api-plan.md](docs/external-corpus-api-plan.md) | **外部法規 corpus 計畫**：MOJ 全國法規資料庫來源契約、正規化規則、可重現 snapshot 與 corpus fingerprint、Slice A–D scope（**離線 evaluation 基礎建設，production 不使用外部語料**） |
 | [docs/reports/corpus-moj-law-pilot-report.md](docs/reports/corpus-moj-law-pilot-report.md) | **外部 corpus pilot 結果**：100 部法規 snapshot 的 corpus statistics、chunk／token 分布、混淆性量測、retrieval sanity 觀察與 pilot 結論（**非品質評測**） |
+| [docs/reports/corpus-moj-law-challenge-report.md](docs/reports/corpus-moj-law-challenge-report.md) | **外部 corpus challenge 結果**（Slice D2）：刻意納入 title／active-repealed confuser 的 100 部法規 snapshot、混淆密度限制與 sanity 觀察（**非品質評測**，非 representative sample） |
+| [docs/legal-hard-holdout-plan.md](docs/legal-hard-holdout-plan.md) | **法律 Hard Holdout 評估計畫**（PLAN ONLY）：在已 freeze 的 challenge corpus 上建立 hard holdout dataset、比較五個 retrieval arm（含尚未實作的 Legal Identifier Support）的前提、anti-leakage 規則與流程；尚未建立任何 question／label／dataset |
