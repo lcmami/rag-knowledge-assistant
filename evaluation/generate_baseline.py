@@ -1,10 +1,13 @@
 """產生 v1.1 Slice 0 Baseline 報告（規格 §九、§十）。
 
 在隔離 collection（預設 factory_baseline_v1_1）上，對 sample_docs + evaluation/fixtures
-的 corpus 執行 `evaluation/cases.json`，輸出：
+的 corpus 執行 `evaluation/cases.json`，輸出（runtime 產物，已被 .gitignore 排除）：
 
-    evaluation/baseline-v1.1.json
-    evaluation/baseline-v1.1.md
+    evaluation/runs/baseline-v1.1.json
+    evaluation/runs/baseline-v1.1.md
+
+v1.1 Slice 0 當時的結果快照保存於 ``docs/reports/baseline-v1.1.{json,md}``
+（historical evidence，本腳本不會覆寫）。
 
 並依實際 Baseline **推導**四項硬限制建議（不憑空填、附推導方式與可信度）。
 
@@ -35,8 +38,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAMPLE_DIR = os.path.join(ROOT, "sample_docs")
 FIXTURES_DIR = os.path.join(ROOT, "evaluation", "fixtures")
 CASES_PATH = os.path.join(ROOT, "evaluation", "cases.json")
-JSON_OUT = os.path.join(ROOT, "evaluation", "baseline-v1.1.json")
-MD_OUT = os.path.join(ROOT, "evaluation", "baseline-v1.1.md")
+JSON_OUT = os.path.join(ROOT, "evaluation", "runs", "baseline-v1.1.json")
+MD_OUT = os.path.join(ROOT, "evaluation", "runs", "baseline-v1.1.md")
 
 ALARM_DOC = "equipment_alarm_manual.md"
 CONFUSABLE_DOC = "confusable_alarm_d900.md"
@@ -341,6 +344,8 @@ def main() -> None:
     payload["generated_at"] = generated_at
     payload["hard_limit_suggestions"] = hard_limits
 
+    os.makedirs(os.path.dirname(JSON_OUT), exist_ok=True)
+    os.makedirs(os.path.dirname(MD_OUT), exist_ok=True)
     with open(JSON_OUT, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     with open(MD_OUT, "w", encoding="utf-8") as f:

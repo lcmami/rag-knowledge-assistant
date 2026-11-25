@@ -1,5 +1,13 @@
 # Cross-Encoder Rerank — Quality Evaluation (v1.2.1 Slice R3)
 
+> **Historical note (added after v1.3).** This report records the evaluation environment as it
+> existed at v1.2.1. In v1.3 the embedding backend changed from a local model
+> (`BAAI/bge-small-zh-v1.5`) to an external OpenAI-compatible API, so the current `main` can no
+> longer reproduce these results exactly; the "reproducible from the committed config" statement
+> below holds only for the v1.2.1 code and environment it cites. For provenance and reproduction
+> guidance, see [docs/reports/README.md](README.md#為什麼這些結果無法在目前-main-重現).
+> The content below is unchanged.
+
 Canonical, committed record of the R3 rerank comparison. The raw search output lives under
 `evaluation/searches/`, which is **gitignored** (`.gitignore:27`); this file is the permanent
 evidence and is reproducible from the committed config (see [Reproduction](#reproduction)).
@@ -147,7 +155,7 @@ would break H3 and is prohibited.
 
 ### Engineering conclusion — R2 dedicated benchmark (authoritative)
 
-`evaluation/rerank-end-to-end-latency-v1.2.1.json` · n=30 per arm · warm-up timed separately
+`docs/reports/rerank-end-to-end-latency-v1.2.1.json` · n=30 per arm · warm-up timed separately
 and discarded · **rerank cache disabled and verified at 0 hits** · scope
 **local native-Qdrant loopback end-to-end measurement**.
 

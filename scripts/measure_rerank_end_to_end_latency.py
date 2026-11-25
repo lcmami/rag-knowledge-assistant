@@ -55,8 +55,10 @@ DEFAULT_QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 CORPUS_DIRS = ("sample_docs", "evaluation/fixtures")
 DATASET_PATH = "evaluation/datasets/v1.1/cases-v2.json"
 
-OUT_JSON = "evaluation/rerank-end-to-end-latency-v1.2.1.json"
-OUT_MD = "evaluation/rerank-end-to-end-latency-v1.2.1.md"
+#: 預設輸出為 runtime 產物（gitignored）。v1.2.1 R2 當時的實測快照保存於
+#: docs/reports/rerank-end-to-end-latency-v1.2.1.{json,md}（historical evidence，不得被重跑覆寫）。
+OUT_JSON = "evaluation/runs/rerank-end-to-end-latency-v1.2.1.json"
+OUT_MD = "evaluation/runs/rerank-end-to-end-latency-v1.2.1.md"
 
 #: §0(4)：低於此樣本數一律標為 low confidence。
 CONFIDENCE_MIN_SAMPLES = 30
@@ -89,7 +91,7 @@ R0_PROVISIONAL = {
     "provisional_end_to_end_p95_ms": 2222.6165,
     "rerank_top_n": 5,
     "status": "PROVISIONAL estimate — sum of two independently measured components",
-    "provenance": "evaluation/rerank-latency-baseline-v1.2.1.json",
+    "provenance": "docs/reports/rerank-latency-baseline-v1.2.1.json",
 }
 
 ARMS = {
@@ -566,6 +568,8 @@ def main() -> int:
             ],
         }
 
+        for out_rel in (args.out_json, args.out_md):
+            os.makedirs(os.path.dirname(os.path.join(_ROOT, out_rel)), exist_ok=True)
         with open(os.path.join(_ROOT, args.out_json), "w", encoding="utf-8") as fh:
             json.dump(doc, fh, ensure_ascii=False, sort_keys=True)
             fh.write("\n")

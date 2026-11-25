@@ -84,7 +84,8 @@ tests/           unit / integration / e2e（Playwright）
 以下指令可在**不提供 API key** 的情況下執行 optimizer 核心流程。
 
 ```bash
-# Slice 0 baseline（v1.0 檢索 baseline；會覆寫 evaluation/results.json，請自行 git checkout 還原）
+# Slice 0 baseline（v1.0 檢索 baseline；輸出至 evaluation/runs/results.json，已 gitignore；
+# v1.0 當時的快照見 docs/reports/results.json，不會被覆寫）
 python -m evaluation.evaluate_retrieval
 
 # Trial Runner / Chunking / Identifier smoke（隔離 collection，需 Qdrant）

@@ -92,7 +92,7 @@ npm run test:e2e
 ```
 
 需要已啟動的 API；Optimizer 分頁的示範資料來源見
-[developer-guide.md](developer-guide.md#optimizer-ui-示範資料)。
+[developer-guide.md](developer-guide.md#6-optimizer-ui-示範資料)。
 
 ## 5. 測試設計原則
 
@@ -111,10 +111,10 @@ npm run test:e2e
 檢索品質評估是獨立的評估腳本，不在 pytest 流程內：
 
 ```powershell
-# 會覆寫 evaluation/results.json，請自行 git checkout 還原
+# 輸出至 evaluation/runs/results.json（已 gitignore）；v1.0 當時的快照見 docs/reports/results.json
 .venv/Scripts/python.exe -m evaluation.evaluate_retrieval
 ```
 
 結果與方法論見 [v1.0-runtime-verification.md](v1.0-runtime-verification.md#相關檢索評估)、
-[`evaluation/baseline-v1.1.md`](../evaluation/baseline-v1.1.md) 與
+[`docs/reports/baseline-v1.1.md`](reports/baseline-v1.1.md) 與
 [v1.1-retrieval-optimizer-requirements.md §8](v1.1-retrieval-optimizer-requirements.md#8-metrics)。

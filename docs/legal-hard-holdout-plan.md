@@ -8,8 +8,8 @@
 >
 > 相關文件：
 > - [external-corpus-api-plan.md](external-corpus-api-plan.md) — corpus Slice A–D 計畫
-> - [../evaluation/corpus-moj-law-pilot-report.md](../evaluation/corpus-moj-law-pilot-report.md) — Slice D（pcode-first pilot，NOT YET SUITABLE）
-> - [../evaluation/corpus-moj-law-challenge-report.md](../evaluation/corpus-moj-law-challenge-report.md) — Slice D2（challenge corpus，SUITABLE）
+> - [reports/corpus-moj-law-pilot-report.md](reports/corpus-moj-law-pilot-report.md) — Slice D（pcode-first pilot，NOT YET SUITABLE）
+> - [reports/corpus-moj-law-challenge-report.md](reports/corpus-moj-law-challenge-report.md) — Slice D2（challenge corpus，SUITABLE）
 > - [v1.1-retrieval-optimizer-requirements.md](v1.1-retrieval-optimizer-requirements.md) — 既有 evaluation schema / metric 需求來源
 > - [v1.2.1-rerank-design.md](v1.2.1-rerank-design.md) — Cross-Encoder rerank 設計
 
@@ -326,7 +326,7 @@ metadata 記憶行為，不能作為 retrieval 品質結論。
   約 3–5 分鐘（需確認語料中確實無對應條文）。
 - 執行成本：challenge corpus 索引一次約 **230 s**（2,637 chunk，D2 實測）。
   5 個 arm ⇒ 5 次索引 ≈ 19 min，加上 per-case retrieval；CE arm 顯著較慢
-  （見 `evaluation/rerank-end-to-end-latency-v1.2.1.md`）。**此為估算，H5 需實測。**
+  （見 `docs/reports/rerank-end-to-end-latency-v1.2.1.md`）。**此為估算，H5 需實測。**
 
 | 規模 | cases | answerable / unanswerable | 每 category 平均 | 建置工時估算 | test split（35%） | 適合的結論粒度 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -649,7 +649,7 @@ Final test evaluation 為**單次**執行、五個 arm 同時進行，且必須�
 ## 6. Cross-Encoder：quality 與 deployability 必須分離
 
 已知事實：CE 的 quality signal 有前景，但 **production latency 不符目前 SLO**
-（見 `docs/v1.2.1-rerank-design.md` 與 `evaluation/rerank-end-to-end-latency-v1.2.1.md`）。
+（見 `docs/v1.2.1-rerank-design.md` 與 `docs/reports/rerank-end-to-end-latency-v1.2.1.md`）。
 
 本 benchmark **保留 A3 / A5 兩個 CE arm**，因為本次目的首先是研究 ranking quality。
 

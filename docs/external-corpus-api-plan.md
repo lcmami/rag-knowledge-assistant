@@ -606,7 +606,7 @@ external source → snapshot → normalized docs → chunks → Qdrant → retri
 
 **停止條件**：**STOP**，等待 review。**不得**自行開啟 Slice E 或建立評測資料集。
 
-**Slice D 執行結果（實測，見 [evaluation/corpus-moj-law-pilot-report.md](../evaluation/corpus-moj-law-pilot-report.md)）**
+**Slice D 執行結果（實測，見 [docs/reports/corpus-moj-law-pilot-report.md](reports/corpus-moj-law-pilot-report.md)）**
 
 - snapshot `moj-chlaw-20260821-2e815ced-9629909b`：100 部法規、3,437 條文、
   3,643 chunk；入庫體積約 1.28 MB，**未**觸發 §6.7 的 10 MB size trigger。
@@ -678,7 +678,7 @@ external source → snapshot → normalized docs → chunks → Qdrant → retri
 | 共用 6 字前綴 | 4 群 / 8 部 | 95 群 / 288 部 |
 | 已廢止法規 | 23 | 322 |
 
-後果：本 snapshot 的條號歧義與跨法規語意歧義充足，但**標題混淆與現行／廢止混淆幾乎不存在**。任何基於本 snapshot 的結論**不得**外推至完整 corpus；建立 hard holdout 前需先決定 selection policy（見 [evaluation/corpus-moj-law-pilot-report.md](../evaluation/corpus-moj-law-pilot-report.md) §7.F）。
+後果：本 snapshot 的條號歧義與跨法規語意歧義充足，但**標題混淆與現行／廢止混淆幾乎不存在**。任何基於本 snapshot 的結論**不得**外推至完整 corpus；建立 hard holdout 前需先決定 selection policy（見 [docs/reports/corpus-moj-law-pilot-report.md](reports/corpus-moj-law-pilot-report.md) §7.F）。
 
 ---
 

@@ -33,8 +33,8 @@ confuser 僅佔 52 部（3.9%）。因此本 corpus 的混淆密度**遠高於**
   狹窄切片」，D2 是「刻意加壓的 confusability 切片」。兩份 snapshot 皆保留。
 
 相關文件：
-- [docs/external-corpus-api-plan.md](../docs/external-corpus-api-plan.md) — 完整計畫
-- [evaluation/corpus-moj-law-pilot-report.md](corpus-moj-law-pilot-report.md) — Slice D（pcode-first pilot，NOT YET SUITABLE）
+- [docs/external-corpus-api-plan.md](../external-corpus-api-plan.md) — 完整計畫
+- [docs/reports/corpus-moj-law-pilot-report.md](corpus-moj-law-pilot-report.md) — Slice D（pcode-first pilot，NOT YET SUITABLE）
 
 ---
 
